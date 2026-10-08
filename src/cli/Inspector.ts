@@ -126,7 +126,10 @@ export const connectInspector = Effect.fn("Inspector.connect")(function* (
           (deferred) =>
             Deferred.fail(
               deferred,
-              new ClaudeError({ message: "Debugger disconnected" }),
+              new ClaudeError({
+                message:
+                  "The connection to Claude was interrupted. Enable Developer → Enable Main Process Debugger, then run bun run status to check the patch before retrying.",
+              }),
             ),
           { discard: true },
         ),
