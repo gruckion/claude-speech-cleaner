@@ -72,19 +72,26 @@ test("fenced prose remains audible when narration returns only a placeholder", a
   const input =
     "Before.\n\n```rust\nProposed:\n- Give reviewers read-only access.\n- Run the app to reproduce the issue.\n```\n\nAfter.";
   const clean = await Effect.runPromise(createSpeechCleaner([codeBlocks]));
-  const result = await Effect.runPromise(
-    clean(input).pipe(
-      Effect.provideService(BlockClassifier, {
-        classify: () => Effect.succeed(["summarize"]),
-      }),
-      Effect.provideService(CodeNarrator, {
-        narrate: () => Effect.succeed("```text\n**Code summary**\n```"),
-      }),
-    ),
-  );
-  expect(result.text).toBe(
-    "Before.\n\nProposed:\n- Give reviewers read-only access.\n- Run the app to reproduce the issue.\n\nAfter.",
-  );
+  for (const placeholder of [
+    "Code summary",
+    "```text\n**Code summary**\n```",
+    "(code block)",
+    "(Code summary)",
+  ]) {
+    const result = await Effect.runPromise(
+      clean(input).pipe(
+        Effect.provideService(BlockClassifier, {
+          classify: () => Effect.succeed(["summarize"]),
+        }),
+        Effect.provideService(CodeNarrator, {
+          narrate: () => Effect.succeed(placeholder),
+        }),
+      ),
+    );
+    expect(result.text).toBe(
+      "Before.\n\nProposed:\n- Give reviewers read-only access.\n- Run the app to reproduce the issue.\n\nAfter.",
+    );
+  }
 });
 
 test("prose is unwrapped recursively without a narrator call, even with misleading fence labels", async () => {
