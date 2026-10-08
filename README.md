@@ -9,6 +9,7 @@ generated code, files, clipboard and keyboard input stay untouched.
 
 - Read separators in backtick-wrapped filenames, paths and snake_case identifiers as spaces.
 - Read unquoted file paths as words and omit Markdown blockquote markers from speech.
+- Shorten contextually identified hashes to “hash ending c541” using opt-in Jev classification.
 - Turn Markdown tables into spoken prose using an LLM.
 - Read fenced prose directly; classify actual code with Jev before asking an LLM to explain it.
 - Add named, independently testable replacers in one registration file.
@@ -86,8 +87,8 @@ Only recognized table source is sent for table narration. With both AI settings
 and `SPEECH_CLASSIFIER_ENABLED=true`, recognized fenced/indented blocks are sent
 to Jev (TypeSafe) in one classification request. This includes prose, comments,
 string literals and fence labels. Only blocks selected for explanation are sent
-to the configured narration provider. Neither service receives the surrounding
-response or chat history. `SPEECH_AI_ENABLED=false` disables both AI rules.
+to the configured narration provider. These table/block requests do not include the surrounding
+response or chat history. Optional hash classification has its own context scope below. `SPEECH_AI_ENABLED=false` disables both AI rules.
 
 Jev answers a Choice question about content type and a Noul question about
 whether the block is natural-language prose. The rule requests a summary only
@@ -119,6 +120,36 @@ so an Anthropic, OpenAI, local-model or other Effect provider Layer can replace
 the supplied configuration in `src/ai/Provider.ts` without changing the replacers
 or engine. Each narrator owns its instructions; shared completion validation
 lives in `src/ai/Narration.ts`.
+
+## Hashes
+
+To shorten spoken commit and migration hashes, set `SPEECH_AI_HASH_ENABLED=true`
+alongside `SPEECH_AI_ENABLED=true` and `SPEECH_CLASSIFIER_ENABLED=true`. It uses
+`TYPESAFE_API_KEY` and `TYPESAFE_MODEL`; code-block narration need not be enabled.
+Reapply after changing configuration.
+
+The independent `hashes` replacer finds standalone hexadecimal candidates of
+7–64 characters in visible paragraph/heading text, including inline code and link
+labels. It sends at most 32 candidates per speech request to Jev, each with up to
+160 characters before and after the candidate from the same paragraph/heading.
+Link destinations, visible URLs and still-fenced code are excluded. Remaining
+candidates beyond the limit are unchanged.
+
+A Noul question asks whether the context establishes a commit hash, migration
+revision or checksum. A probability of at least 0.9 replaces only that occurrence
+with “hash ending ” and its final four characters. This is a conservative threshold,
+not measured accuracy. Invoice numbers, colours and other ambiguous values should
+remain unchanged; classification can still be wrong. The same token can receive
+different decisions in different contexts. Four-character suffixes can collide.
+
+Missing, uncertain or malformed answers, errors, and the 1.5-second hash deadline
+preserve original tokens. This setting is a separate opt-in because it sends nearby
+visible prose to Jev, unlike block/table-only narration. The global AI switch disables
+it. Original conversation text and links are never rewritten.
+
+```sh
+bun run preview examples/hashes.md
+```
 
 ## Paths and quotes
 
@@ -164,6 +195,7 @@ import {
   separators,
   filePaths,
   blockquotes,
+  hashes,
 } from "./src/replacers/index.ts";
 import type {
   Replacer,
@@ -171,14 +203,19 @@ import type {
   TableNarrator,
   CodeNarrator,
   BlockClassifier,
+  HashClassifier,
 } from "./src/index.ts";
 import { pullRequests } from "./src/replacers/pullRequests.ts";
 
 export const replacers: ReadonlyArray<
-  Replacer<NarrationFailed, TableNarrator | CodeNarrator | BlockClassifier>
+  Replacer<
+    NarrationFailed,
+    TableNarrator | CodeNarrator | BlockClassifier | HashClassifier
+  >
 > = [
   codeBlocks,
   markdownTables,
+  hashes,
   filePaths,
   separators,
   blockquotes,
@@ -270,7 +307,9 @@ Unhandled replacer failures revert that rule's changes and allow later rules to 
 default per-rule deadline is four seconds; all sequential calls within each rule
 share its deadline. Large or multiple tables/code blocks may therefore fall back
 to their original speech input. The live speech hook has an eight
-second overall deadline, after which it speaks the original text. Inputs over
+second overall deadline, after which it speaks the original text. Hash classification
+adds up to 1.5 seconds; a message with slow code, table and hash processing can hit
+that overall deadline even when the individual rules finish within their limits. Inputs over
 100,000 characters bypass transformations. Each renderer allows four concurrent
 requests. Text is held only during processing, with no persisted cache.
 

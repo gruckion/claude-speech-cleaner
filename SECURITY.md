@@ -26,9 +26,15 @@ block-classification opt-in sends recognized fenced/indented blocks to Jev
 (TypeSafe), including fenced prose, comments and string literals. Blocks selected
 for explanation then go to the configured narration provider. All three settings
 `SPEECH_AI_ENABLED`, `SPEECH_AI_CODE_ENABLED` and `SPEECH_CLASSIFIER_ENABLED` must
-be true for classification. Without the classifier, enabled block handling reads
+be true for block classification. Without the classifier, enabled block handling reads
 contents locally with fences removed. Neither rule sends surrounding conversation
-text. Source may contain secrets: leave these options disabled for material you
+text. Hash classification is separately enabled by `SPEECH_AI_HASH_ENABLED` plus
+`SPEECH_AI_ENABLED` and `SPEECH_CLASSIFIER_ENABLED`. It sends Jev at most 32 visible
+hexadecimal candidates, each with up to 160 characters of visible text on either
+side from its paragraph/heading. It excludes link destinations, visible URLs and
+still-fenced code. Nearby prose can be private; enable it only for material you
+want classified. The key remains in the main process and no content is logged.
+Source may contain secrets: leave these options disabled for material you
 do not want sent. Each provider's privacy, retention and billing policies apply.
 
 Only install replacers and provider code that you trust: they execute with your

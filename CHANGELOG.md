@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.0 — 2026-10-08
+
+- Add an independently registered, separately opt-in hash speech rule using Jev context classification.
+- Speak confidently identified commit hashes, migration revisions and checksums as “hash ending” plus their last four characters.
+- Preserve uncertain candidates, numbers and non-hash values; bound context, request size and latency.
+
 ## 2.2.1 — 2026-10-08
 
 - Read file-path slashes as spaces, including unquoted paths with filename extensions.
