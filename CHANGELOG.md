@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.2.0 — 2026-10-08
+
+- Classify fenced contents with separately opt-in Jev Choice/Noul questions. Read
+  prose, mixed and uncertain blocks directly; explain confidently classified code
+  and data with the existing narrator. Without Jev, enabled blocks read directly.
+- Preserve audible contents on classification/narration failure or deadlines,
+  unwrap nested/generated fences, and remove the added “Code summary” label.
+- Clean underscores in backtick-wrapped snake_case identifiers, including function
+  names, while preserving command flags and negative numbers.
+
 ## 2.1.1 — 2026-10-08
 
 - Render expected debugger failures through Effect CLI user errors instead of

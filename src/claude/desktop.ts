@@ -312,6 +312,10 @@ export async function install(
             appVersion: app.getVersion(),
             aiEnabled: settings.enabled,
             codeNarrationEnabled: settings.enabled && settings.codeEnabled,
+            blockClassificationEnabled:
+              settings.enabled &&
+              settings.codeEnabled &&
+              settings.classifier !== undefined,
             failures,
             injections,
             pages: statuses,

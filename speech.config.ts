@@ -11,12 +11,13 @@ import type {
   NarrationFailed,
   TableNarrator,
   CodeNarrator,
+  BlockClassifier,
 } from "./src/index.ts";
 
-/** Register new replacers here. Table structure must be parsed before punctuation cleanup. */
+/** Register new replacers here. Unwrap blocks before parsing tables; clean inline references last. */
 export const replacers: ReadonlyArray<
-  Replacer<NarrationFailed, TableNarrator | CodeNarrator>
-> = [markdownTables, codeBlocks, separators];
+  Replacer<NarrationFailed, TableNarrator | CodeNarrator | BlockClassifier>
+> = [codeBlocks, markdownTables, separators];
 
 /** Compose any new service-backed replacer's Layer here, without changing the engine. */
 export const cleanerLayer = (settings: ProviderSettings) =>

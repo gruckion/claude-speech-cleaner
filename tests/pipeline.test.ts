@@ -5,9 +5,13 @@ import { separators } from "../src/replacers/index.ts";
 import { pullRequests } from "../examples/custom-replacer.ts";
 import { SpeechCleaner } from "../src/engine/SpeechCleaner.ts";
 
-test("separator cleanup targets only inline code containing a file reference", async () => {
+test("separator cleanup targets only inline code containing a file reference or identifier", async () => {
   const clean = await Effect.runPromise(createSpeechCleaner([separators]));
   const cases: ReadonlyArray<readonly [string, string]> = [
+    [
+      "Call `enqueue_route_optimizations_after_commit` and `submit_route_optimization`.",
+      "Call `enqueue route optimizations after commit` and `submit route optimization`.",
+    ],
     ["Open `some/file-name.bob`.", "Open `some/file name.bob`."],
     [
       "Use `my_file-name.ts` and `~/café_notes/version-2/`.",
@@ -23,7 +27,7 @@ test("separator cleanup targets only inline code containing a file reference", a
     ],
     [
       "`-12` `-£12` `-.5` `3-5` `1e-3` `some_variable` `--dry-run`",
-      "`-12` `-£12` `-.5` `3-5` `1e-3` `some_variable` `--dry-run`",
+      "`-12` `-£12` `-.5` `3-5` `1e-3` `some variable` `--dry-run`",
     ],
     [
       "`git diff --stat file-name.ts` and `https://example.com/my_file`",

@@ -4,17 +4,20 @@ import type { RootContent } from "mdast";
 import { defineReplacer } from "../engine/Replacer.ts";
 
 // A conservative filename/path heuristic, not a filesystem lookup. Reject
-// command strings, URLs, flags and bare variables even when they use backticks.
+// command strings, URLs and flags even when they use backticks.
 const isFileReference = (value: string) =>
   /^(?:~\/)?[\p{L}\p{N}_./][\p{L}\p{N}_./-]*$/u.test(value) &&
   /\p{L}/u.test(value) &&
   (value.includes("/") || /\.[\p{L}][\p{L}\p{N}]*$/u.test(value));
 
-/** Only rewrite source spans that Markdown recognizes as inline file references. */
+const isIdentifier = (value: string) =>
+  /^[\p{L}_][\p{L}\p{N}_]*_[\p{L}\p{N}_]+(?:\(\))?$/u.test(value);
+
+/** Keep speech cleanup scoped to inline references, never code or command strings. */
 export const separators = defineReplacer({
   id: "separators",
   description:
-    "Read separators in backtick-wrapped filenames and paths as spaces",
+    "Read separators in backtick-wrapped filenames, paths and identifiers as spaces",
   matches: (text) => text.includes("`") && /[-_]/.test(text),
   replace: (text) =>
     Effect.sync(() => {
@@ -23,7 +26,10 @@ export const separators = defineReplacer({
       let cursor = 0;
       function visit(nodes: ReadonlyArray<RootContent>) {
         for (const node of nodes) {
-          if (node.type === "inlineCode" && isFileReference(node.value)) {
+          if (
+            node.type === "inlineCode" &&
+            (isFileReference(node.value) || isIdentifier(node.value))
+          ) {
             const start = node.position?.start.offset;
             const end = node.position?.end.offset;
             if (start === undefined || end === undefined) continue;
