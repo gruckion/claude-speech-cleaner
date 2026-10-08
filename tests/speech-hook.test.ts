@@ -21,7 +21,7 @@ test("hook transforms only the speech argument and restores the original engine"
   const original = engine.speak;
   const clean = await Effect.runPromise(createSpeechCleaner([separators]));
   const hook = installSpeechHook(engine, clean);
-  const text = "Open my_project/release-notes.md.";
+  const text = "Open `my_project/release-notes.md`.";
   const done = () => {};
   const options = { voice: "test", conversationUuid: "keep-id" };
   engine.speak("message-id", text, done, options);
@@ -30,11 +30,11 @@ test("hook transforms only the speech argument and restores the original engine"
   );
   expect(args).toEqual([
     "message-id",
-    "Open my project/release notes.md.",
+    "Open `my project/release notes.md`.",
     done,
     options,
   ]);
-  expect(text).toBe("Open my_project/release-notes.md.");
+  expect(text).toBe("Open `my_project/release-notes.md`.");
   expect(hook.undo()).toBe(true);
   expect(engine.speak).toBe(original);
   engine.speak("message-id", text, done, options);

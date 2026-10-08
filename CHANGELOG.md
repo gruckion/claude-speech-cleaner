@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.2 — 2026-10-08
+
+- Limit filename cleanup to Markdown inline code containing a filename or path.
+  Hyphens and underscores in those references become spaces; ordinary prose,
+  numbers, commands, variables and code blocks keep their original text.
+- Recognize inline code with the Markdown parser, including multi-backtick spans,
+  rather than treating fenced examples or escaped backticks as file references.
+
 ## 2.0.1 — 2026-10-08
 
 First public experimental release for Claude Desktop on macOS.

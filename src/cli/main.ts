@@ -73,7 +73,7 @@ const preview = Command.make(
 
 Command.make("claude-speech-cleaner").pipe(
   Command.withSubcommands([apply, status, remove, preview]),
-  Command.run({ version: "2.0.1" }),
+  Command.run({ version: "2.0.2" }),
   Effect.provide([
     BunServices.layer,
     FetchHttpClient.layer,
