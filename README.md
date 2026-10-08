@@ -12,6 +12,8 @@ generated code, files, clipboard and keyboard input stay untouched.
 - Explain code blocks in a few spoken sentences with a separate opt-in.
 - Add named, independently testable replacers in one registration file.
 
+https://github.com/user-attachments/assets/f24a794a-db2a-4b1a-8fa9-61fb0790688e
+
 This is an unofficial macOS runtime modification, not a Claude Code plugin or an
 Anthropic-supported extension. It leaves Claude's installed files unchanged.
 **Experimental:** tested with Claude Desktop 2.26454.2. Private Claude interfaces
