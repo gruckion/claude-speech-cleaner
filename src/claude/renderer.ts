@@ -1,67 +1,26 @@
 import { Effect, Schema } from "effect";
-import { ClaudeError, Reply } from "./protocol.ts";
+import { ClaudeError } from "./protocol.ts";
 import { installSpeechHook, type SpeechEngine } from "./SpeechHook.ts";
-import type { ReplacementResult } from "../engine/Replacer.ts";
+import { createRendererBridge } from "./RendererBridge.ts";
+import { selectFinalAnswer } from "./FinalAnswer.ts";
 
 declare global {
-  var __claudeSpeechCleanerRequest: (payload: string) => void;
   var __claudeSpeechCleaner: ReturnType<typeof install> | undefined;
   var __claudeSpeechActivate: typeof activate;
 }
 
 function install(engine: SpeechEngine) {
-  const waiting = new Map<
-    string,
-    (effect: Effect.Effect<ReplacementResult, ClaudeError>) => void
-  >();
-  const prefix = crypto.randomUUID();
-  let sequence = 0;
-  const hook = installSpeechHook(engine, (text) =>
-    Effect.callback<ReplacementResult, ClaudeError>((resume) => {
-      const id = `${prefix}:${++sequence}`;
-      waiting.set(id, resume);
-      try {
-        globalThis.__claudeSpeechCleanerRequest(
-          JSON.stringify({ kind: "replace", id, text }),
-        );
-      } catch {
-        resume(
-          Effect.fail(
-            new ClaudeError({ message: "Speech bridge unavailable" }),
-          ),
-        );
-      }
-      return Effect.sync(() => {
-        if (waiting.delete(id)) {
-          try {
-            globalThis.__claudeSpeechCleanerRequest(
-              JSON.stringify({ kind: "cancel", id }),
-            );
-          } catch {
-            /* Host removed. */
-          }
-        }
-      });
-    }).pipe(
-      Effect.catch(() =>
-        Effect.succeed({
-          text,
-          applied: false,
-          changes: [],
-          skipped: ["bridge"],
-        }),
-      ),
-    ),
-  );
+  const bridge = createRendererBridge();
+  const hook = installSpeechHook(engine, bridge.replace, selectFinalAnswer);
   return {
     ...hook,
-    deliver: (input: unknown) => {
-      const result = Schema.decodeUnknownOption(Reply)(input);
-      if (result._tag === "None") return;
-      const reply = result.value;
-      const resume = waiting.get(reply.id);
-      waiting.delete(reply.id);
-      resume?.(Effect.succeed(reply));
+    instance: bridge.instance,
+    drain: bridge.drain,
+    deliver: bridge.deliver,
+    undo: () => {
+      const restored = hook.undo();
+      bridge.close();
+      return restored;
     },
   };
 }
@@ -99,6 +58,9 @@ export const activate = (moduleUrl: string) =>
         return yield* new ClaudeError({
           message: "Claude speech interface changed",
         });
+      // Imports can overlap across repeated activation; check again after awaiting.
+      if (globalThis.__claudeSpeechCleaner?.status().active)
+        return globalThis.__claudeSpeechCleaner.status();
       globalThis.__claudeSpeechCleaner = install(engine);
       return globalThis.__claudeSpeechCleaner.status();
     }),

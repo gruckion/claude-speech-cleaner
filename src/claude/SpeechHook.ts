@@ -20,6 +20,7 @@ export interface SpeechEngine {
 export function installSpeechHook(
   engine: SpeechEngine,
   replace: (text: string) => Effect.Effect<ReplacementResult>,
+  selectText: (messageId: string, text: string) => string = (_id, text) => text,
 ) {
   const originalSpeak = engine.speak;
   const originalStop = engine.stop;
@@ -42,24 +43,30 @@ export function installSpeechHook(
     cancel("superseded");
     originalStop.call(engine);
     const current = generation;
+    let speechText = args[1];
+    try {
+      speechText = selectText(args[0], speechText);
+    } catch {
+      /* Claude markup changed. */
+    }
     // Run asynchronously so the pending handle exists even for a synchronous rule.
     const fiber = Effect.runFork(
       Effect.gen(function* () {
         yield* Effect.yieldNow;
         const result = yield* (
-          args[1].length > 100_000
+          speechText.length > 100_000
             ? Effect.succeed({
-                text: args[1],
+                text: speechText,
                 applied: false,
                 changes: [],
                 skipped: ["size-limit"],
               })
-            : replace(args[1])
+            : replace(speechText)
         ).pipe(
           Effect.timeout(8000),
           Effect.catchCause(() =>
             Effect.succeed({
-              text: args[1],
+              text: speechText,
               applied: false,
               changes: [],
               skipped: ["pipeline"],
