@@ -1,0 +1,18 @@
+{
+  "name": "claude-speech-cleaner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "apply": "bun cli.mjs apply --wait",
+    "status": "bun cli.mjs status",
+    "remove": "bun cli.mjs remove"
+  },
+  "description": "Speech-only punctuation cleanup for Claude Desktop on macOS.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gruckion/claude-speech-cleaner.git"
+  }
+}
