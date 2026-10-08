@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.3.1 — 2026-10-08
+
+- Start Claude Code Read aloud with the answer after activity groups, preserving
+  Markdown for table and code narration. Unknown UI shapes retain the original
+  input.
+- Replace the permanent renderer debugger bridge with a scoped, bounded mailbox.
+  This is a mitigation for reported intermittent doubled typing; its root cause
+  has not been established. Keep Stop, supersession and document isolation.
+- Prevent overlapping renderer activations from stacking speech hooks.
+
 ## 2.3.0 — 2026-10-08
 
 - Add an independently registered, separately opt-in hash speech rule using Jev context classification.

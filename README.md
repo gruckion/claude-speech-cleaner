@@ -275,6 +275,15 @@ original speech methods. Quitting Claude also removes the runtime modification.
 If another tool replaced those methods, removal reports failure; restart Claude
 rather than overwriting the other tool's changes.
 
+## What gets read aloud
+
+In Claude Code sessions, Read aloud starts with the answer after the last activity
+(tool/progress) group. It skips progress even if you expand that group. Selection
+verifies the progress prefix against the clicked message's transcript items
+and removes only that exact prefix from the original speech input, so tables and code still reach their replacers intact.
+If Claude changes its private UI or the answer cannot be identified reliably,
+the patch keeps Claude's original speech input. Regular chats are unchanged.
+
 ## Architecture
 
 | Location           | Responsibility                                                  |
@@ -288,15 +297,14 @@ rather than overwriting the other tool's changes.
 
 The old WebSocket interception was too late: Claude had already removed table
 pipes and separator rows. The new adapter transforms the complete Markdown input
-to the Read aloud engine **before** Claude cleans/chunks it. A scoped Electron
-`Runtime.addBinding` bridge runs transformations in the main process; the renderer
-receives only the transformed text. Stop and later requests cancel pending work
+to the Read aloud engine **before** Claude cleans/chunks it. A scoped Electron bridge drains a bounded renderer mailbox every 200 ms and runs
+transformations in the main process; the renderer receives only transformed text.
+API keys remain in the main process. Stop and later requests cancel pending work
 so delayed responses cannot restart speech.
 
-The temporary main-process inspector closes after each command. A renderer
-DevTools protocol attachment remains for the bridge while enabled. It creates
-no listening network port. Opening renderer DevTools can detach this bridge;
-close DevTools and reapply if needed.
+The temporary main-process inspector closes after each command. The speech bridge does not attach a renderer
+debugger or open a network port. Each document has its own mailbox identity, so
+late replies cannot cross navigation or reinstallation.
 
 Block handling bounds classification at 1.5 seconds and the combined classification
 and narration work at 3.5 seconds, with at most two narration requests running concurrently.

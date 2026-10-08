@@ -14,7 +14,7 @@ import { type ProviderSettings } from "../ai/Provider.ts";
 import { cleanerLayer } from "../../speech.config.ts";
 import { SpeechCleaner } from "../engine/SpeechCleaner.ts";
 import { discoverSpeechModule } from "./discovery.ts";
-import { bindingName, ClaudeError, Request } from "./protocol.ts";
+import { ClaudeError, Mailbox } from "./protocol.ts";
 
 const key = Symbol.for("claude-speech-cleaner-desktop");
 interface DesktopControl {
@@ -22,18 +22,6 @@ interface DesktopControl {
   remove(): Promise<{ removed: boolean }>;
 }
 const globals = globalThis as typeof globalThis & { [key]?: DesktopControl };
-const ContextCreated = Schema.Struct({
-  context: Schema.Struct({
-    id: Schema.Number,
-    origin: Schema.String,
-    auxData: Schema.Struct({ isDefault: Schema.Boolean }),
-  }),
-});
-const BindingCall = Schema.Struct({
-  name: Schema.String,
-  payload: Schema.String,
-  executionContextId: Schema.Number,
-});
 const Resources = Schema.Array(Schema.String);
 
 const attempt = <A>(operation: () => Promise<A>) =>
@@ -77,15 +65,17 @@ export async function install(
       if (pages.has(view.id) || view.isDestroyed()) return;
       pages.set(view.id, view);
       const viewScope = yield* Scope.fork(scope);
-      const contexts = new Set<number>();
       const requests = new Map<string, Fiber.Fiber<void>>();
-      let attached = false;
       const injectionLock = yield* Semaphore.make(1);
       let documentVersion = 0;
-      const send = (method: string, params: Record<string, unknown> = {}) =>
-        attempt(() => view.debugger.sendCommand(method, params));
+      let instance: string | undefined;
+      const cancelRequests = () => {
+        for (const fiber of requests.values())
+          Effect.runFork(Fiber.interrupt(fiber));
+        requests.clear();
+      };
       const deliver = (
-        context: number,
+        target: string,
         reply: {
           id: string;
           text: string;
@@ -94,101 +84,60 @@ export async function install(
           skipped: ReadonlyArray<string>;
         },
       ) => {
-        if (!active || !allowed(view) || !contexts.has(context))
+        if (!active || !allowed(view) || target !== instance)
           return Effect.void;
-        return send("Runtime.evaluate", {
-          expression: `globalThis.__claudeSpeechCleaner?.deliver(${JSON.stringify(reply)})`,
-          contextId: context,
-        }).pipe(
-          Effect.asVoid,
-          Effect.catch(() => Effect.void),
-        );
+        return attempt(() =>
+          view.executeJavaScript(
+            `globalThis.__claudeSpeechCleaner?.deliver(${JSON.stringify(target)}, ${JSON.stringify(reply)})`,
+          ),
+        ).pipe(Effect.asVoid, Effect.ignore);
       };
-      const onMessage = (
-        _event: Electron.Event,
-        method: string,
-        params: unknown,
-      ) => {
-        if (method === "Runtime.executionContextsCleared") {
-          documentVersion++;
-          contexts.clear();
-          for (const fiber of requests.values())
-            Effect.runFork(Fiber.interrupt(fiber));
-          requests.clear();
-        }
-        if (method === "Runtime.executionContextCreated") {
-          const parsed = Schema.decodeUnknownOption(ContextCreated)(params);
-          if (
-            parsed._tag === "Some" &&
-            parsed.value.context.auxData.isDefault &&
-            parsed.value.context.origin === "https://claude.ai"
-          )
-            contexts.add(parsed.value.context.id);
-        }
-        if (method !== "Runtime.bindingCalled" || !active || !allowed(view))
-          return;
-        const call = Schema.decodeUnknownOption(BindingCall)(params);
-        if (
-          call._tag === "None" ||
-          call.value.name !== bindingName ||
-          !contexts.has(call.value.executionContextId)
-        )
-          return;
-        const parsed = Schema.decodeUnknownOption(
-          Schema.fromJsonString(Request),
-        )(call.value.payload);
+      const poll = Effect.gen(function* () {
+        if (!active || !allowed(view)) return;
+        const version = documentVersion;
+        const input = yield* attempt(() =>
+          view.executeJavaScript(
+            "globalThis.__claudeSpeechCleaner?.drain() ?? null",
+          ),
+        );
+        if (!active || version !== documentVersion) return;
+        const parsed = Schema.decodeUnknownOption(Mailbox)(input);
         if (parsed._tag === "None") return;
-        const request = parsed.value;
-        const context = call.value.executionContextId;
-        const requestKey = `${context}:${request.id}`;
-        if (request.kind === "cancel") {
-          const fiber = requests.get(requestKey);
-          if (fiber) Effect.runFork(Fiber.interrupt(fiber));
-          return;
+        const packet = parsed.value;
+        if (instance !== packet.instance) {
+          cancelRequests();
+          instance = packet.instance;
         }
-        if (requests.has(requestKey)) return;
-        if (requests.size >= 4) {
-          Effect.runSync(
-            Effect.forkIn(
-              deliver(context, {
-                id: request.id,
-                text: request.text,
-                applied: false,
-                changes: [],
-                skipped: ["busy"],
-              }),
-              viewScope,
-            ),
+        for (const request of packet.requests) {
+          if (request.kind === "cancel") {
+            const fiber = requests.get(request.id);
+            if (fiber) yield* Fiber.interrupt(fiber);
+            continue;
+          }
+          if (requests.has(request.id)) continue;
+          if (requests.size >= 4) {
+            yield* deliver(packet.instance, {
+              id: request.id,
+              text: request.text,
+              applied: false,
+              changes: [],
+              skipped: ["busy"],
+            });
+            continue;
+          }
+          const work = Effect.gen(function* () {
+            yield* Effect.yieldNow;
+            const result = yield* cleaner.replace(request.text);
+            yield* deliver(packet.instance, { id: request.id, ...result });
+          }).pipe(
+            Effect.ensuring(Effect.sync(() => requests.delete(request.id))),
           );
-          return;
+          requests.set(request.id, yield* Effect.forkIn(work, viewScope));
         }
-        const work = Effect.gen(function* () {
-          yield* Effect.yieldNow;
-          const result = yield* cleaner.replace(request.text);
-          yield* deliver(context, { id: request.id, ...result });
-        }).pipe(
-          Effect.ensuring(Effect.sync(() => requests.delete(requestKey))),
-        );
-        const fiber = Effect.runSync(Effect.forkIn(work, viewScope));
-        requests.set(requestKey, fiber);
-      };
+      }).pipe(Effect.ignore);
       const inject = Effect.gen(function* () {
         if (!active || !allowed(view)) return;
         const startedVersion = documentVersion;
-        if (!attached) {
-          if (view.debugger.isAttached())
-            return yield* new ClaudeError({
-              message: "Renderer debugger already in use",
-            });
-          yield* Effect.try({
-            try: () => view.debugger.attach("1.3"),
-            catch: () =>
-              new ClaudeError({ message: "Cannot attach renderer debugger" }),
-          });
-          attached = true;
-          yield* send("Runtime.enable");
-          yield* send("Runtime.addBinding", { name: bindingName });
-        }
         const resources = yield* attempt(() =>
           view.executeJavaScript(
             "[...document.querySelectorAll('script[src],link[rel=modulepreload]')].map(e => e.src || e.href).concat(performance.getEntriesByType('resource').map(e => e.name))",
@@ -200,7 +149,6 @@ export async function install(
         );
         if (startedVersion !== documentVersion || !active || !allowed(view))
           return;
-        // The old v1 runtime has already been removed by its control above.
         const result = yield* attempt(() =>
           view.executeJavaScript(
             `${rendererSource}\nglobalThis.__claudeSpeechActivate(${JSON.stringify(moduleUrl)})`,
@@ -222,33 +170,28 @@ export async function install(
           }),
         ),
       );
+      const onNavigate = (
+        _event: Electron.Event,
+        _url: string,
+        inPlace: boolean,
+        mainFrame: boolean,
+      ) => {
+        if (inPlace || !mainFrame) return;
+        documentVersion++;
+        instance = undefined;
+        cancelRequests();
+      };
       const onReady = () => {
         documentVersion++;
+        instance = undefined;
+        cancelRequests();
         Effect.runSync(Effect.forkIn(inject, viewScope));
       };
       const onDestroyed = () => {
         pages.delete(view.id);
         Effect.runFork(Scope.close(viewScope, Exit.void));
       };
-      const onDetached = () => {
-        attached = false;
-        contexts.clear();
-        for (const fiber of requests.values())
-          Effect.runFork(Fiber.interrupt(fiber));
-        if (active && allowed(view))
-          Effect.runSync(
-            Effect.forkIn(
-              attempt(() =>
-                view.executeJavaScript(
-                  "globalThis.__claudeSpeechCleaner?.undo()",
-                ),
-              ).pipe(Effect.ignore),
-              viewScope,
-            ),
-          );
-      };
-      view.debugger.on("message", onMessage);
-      view.debugger.on("detach", onDetached);
+      view.on("did-start-navigation", onNavigate);
       view.on("dom-ready", onReady);
       view.once("destroyed", onDestroyed);
       yield* Scope.addFinalizer(
@@ -257,8 +200,7 @@ export async function install(
           if (view.isDestroyed()) return;
           view.off("dom-ready", onReady);
           view.off("destroyed", onDestroyed);
-          view.debugger.off("message", onMessage);
-          view.debugger.off("detach", onDetached);
+          view.off("did-start-navigation", onNavigate);
           for (const fiber of requests.values()) yield* Fiber.interrupt(fiber);
           if (allowed(view)) {
             const undone = yield* attempt(() =>
@@ -268,15 +210,18 @@ export async function install(
             ).pipe(Effect.catch(() => Effect.succeed(false)));
             if (undone !== true) removed = false;
           }
-          if (attached) {
-            yield* send("Runtime.removeBinding", { name: bindingName }).pipe(
-              Effect.ignore,
-            );
-            if (view.debugger.isAttached()) view.debugger.detach();
-          }
         }),
       );
       yield* inject;
+      yield* Effect.forkIn(
+        Effect.gen(function* () {
+          while (active && !view.isDestroyed()) {
+            yield* poll;
+            yield* Effect.sleep(200);
+          }
+        }),
+        viewScope,
+      );
     });
     const onCreated = (_event: Electron.Event, view: WebContents) => {
       Effect.runSync(
@@ -341,7 +286,7 @@ export async function install(
     await runtime.runPromise(initialize);
     if (injections === 0)
       throw new Error(
-        "No active speech hook. Open a Claude conversation and retry; close renderer DevTools if open.",
+        "No active speech hook. Open a Claude conversation and retry.",
       );
     return await control.status();
   } catch (error) {
