@@ -22,11 +22,14 @@ The API key is loaded from local configuration into the CLI and Claude's main
 process. It is not sent to the renderer or included in status output. Keep `.env`
 private, use `chmod 600 .env`, and never commit it. Your configured provider
 receives the recognized Markdown tables when AI narration is enabled. The
-code-block rule additionally sends recognized code blocks only when
-`SPEECH_AI_CODE_ENABLED=true`, including comments and string literals. Neither
-rule sends surrounding conversation text. Source may contain secrets: leave code
-narration disabled for material you do not want sent. Provider privacy, retention
-and billing policies still apply.
+block-classification opt-in sends recognized fenced/indented blocks to Jev
+(TypeSafe), including fenced prose, comments and string literals. Blocks selected
+for explanation then go to the configured narration provider. All three settings
+`SPEECH_AI_ENABLED`, `SPEECH_AI_CODE_ENABLED` and `SPEECH_CLASSIFIER_ENABLED` must
+be true for classification. Without the classifier, enabled block handling reads
+contents locally with fences removed. Neither rule sends surrounding conversation
+text. Source may contain secrets: leave these options disabled for material you
+do not want sent. Each provider's privacy, retention and billing policies apply.
 
 Only install replacers and provider code that you trust: they execute with your
 local process permissions. This registry is an extension API, not a sandbox.

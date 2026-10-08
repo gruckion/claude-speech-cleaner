@@ -7,9 +7,9 @@ An **Effect 4 TypeScript** pipeline for making Claude Desktop's Read aloud easie
 to follow. It changes only the text passed to speech: conversation history,
 generated code, files, clipboard and keyboard input stay untouched.
 
-- Read separators in backtick-wrapped filenames and paths as spaces.
+- Read separators in backtick-wrapped filenames, paths and snake_case identifiers as spaces.
 - Turn Markdown tables into spoken prose using an LLM.
-- Explain code blocks in a few spoken sentences with a separate opt-in.
+- Read fenced prose directly; classify actual code with Jev before asking an LLM to explain it.
 - Add named, independently testable replacers in one registration file.
 
 This is an unofficial macOS runtime modification, not a Claude Code plugin or an
@@ -57,8 +57,12 @@ SPEECH_AI_ENABLED=true
 SPEECH_AI_BASE_URL=https://api.openai.com/v1
 SPEECH_AI_API_KEY=your-key
 SPEECH_AI_MODEL=your-model
-# Optional: also send code blocks to the provider.
+# Optional: handle fenced/indented contents for speech.
 SPEECH_AI_CODE_ENABLED=true
+# Optional: classify blocks with Jev so actual code/data can be narrated.
+SPEECH_CLASSIFIER_ENABLED=true
+TYPESAFE_API_KEY=your-jev-key
+TYPESAFE_MODEL=jev-latest
 ```
 
 The included provider uses Effect's OpenAI-compatible **chat completions**
@@ -75,23 +79,32 @@ bun run preview examples/code.md
 bun run apply
 ```
 
-Only recognized table source is sent for table narration. With
-`SPEECH_AI_CODE_ENABLED=true`, recognized code blocks are also sent, including
-comments, string literals and fence labels. Neither rule sends the surrounding
-response or chat history. Leave code narration disabled for source you do not
-want to send to that provider. `SPEECH_AI_ENABLED=false` disables both.
+Only recognized table source is sent for table narration. With both AI settings
+and `SPEECH_CLASSIFIER_ENABLED=true`, recognized fenced/indented blocks are sent
+to Jev (TypeSafe) in one classification request. This includes prose, comments,
+string literals and fence labels. Only blocks selected for explanation are sent
+to the configured narration provider. Neither service receives the surrounding
+response or chat history. `SPEECH_AI_ENABLED=false` disables both AI rules.
 
-Tables are narrated with instructions to retain row/column associations, values,
-signs, units and caveats. Code blocks become **“Code summary:”** followed by two
-to four sentences explaining purpose, important operations and visible side
-effects. Backtick fences, tilde fences and indented blocks are recognized; inline
-code and empty blocks are left alone by this rule. No code is executed. The
-original code remains visible and unchanged in the conversation.
+Jev answers a Choice question about content type and a Noul question about
+whether the block is natural-language prose. The rule requests a summary only
+when the combined code/data probability is at least 0.8 and the prose probability
+is at most 0.2. These are conservative routing thresholds, not measured accuracy.
+Language labels such as `rust` are hints, never proof that a block contains code.
+Prose, mixed or uncertain blocks retain their words with fences removed, including
+nested fences. Actual code/data gets a short explanation without a “Code summary”
+label. Tables exposed by unwrapping are handled by the next table rule.
 
-This is generated text: fidelity is not guaranteed. Empty or truncated responses,
-provider errors and timeouts leave that replacer's input unchanged. Claude then
-uses its normal speech cleanup, which replaces triple-backtick blocks with
-“code block.” There is no silent change of provider.
+**Upgrading from 2.1:** without Jev configured, enabled block handling now reads
+contents directly rather than summarising every block. Classification is a
+separate opt-in; a narration key does not authorize sending data to Jev.
+
+Malformed or unavailable classification reads the contents directly. Failed,
+empty, truncated or placeholder-only code narration also falls back to the
+contents, so a draft does not disappear behind Claude's “code block” placeholder.
+Generated narration fences are unwrapped before Claude's cleanup. Table narration
+continues to preserve its original input on failure. No code is executed and the
+original conversation remains unchanged. Generated explanations can be inaccurate.
 
 For models supporting the chat-completions `reasoning_effort` parameter, optionally
 set `SPEECH_AI_REASONING_EFFORT=none` (or another supported effort) to reduce latency.
@@ -137,19 +150,20 @@ import type {
   NarrationFailed,
   TableNarrator,
   CodeNarrator,
+  BlockClassifier,
 } from "./src/index.ts";
 import { pullRequests } from "./src/replacers/pullRequests.ts";
 
 export const replacers: ReadonlyArray<
-  Replacer<NarrationFailed, TableNarrator | CodeNarrator>
-> = [markdownTables, codeBlocks, separators, pullRequests];
+  Replacer<NarrationFailed, TableNarrator | CodeNarrator | BlockClassifier>
+> = [codeBlocks, markdownTables, separators, pullRequests];
 ```
 
 Run `bun run check`, then reapply. **No engine or Claude adapter edits needed.**
 [`examples/custom-replacer.ts`](examples/custom-replacer.ts) is a runnable version.
 
-Rules receive the preceding rule's output. Parse tables before stripping
-punctuation. IDs must be unique. A matcher is optional; `replace` returns an
+Rules receive the preceding rule's output. Unwrap blocks before parsing tables,
+then clean inline references. IDs must be unique. A matcher is optional; `replace` returns an
 Effect, so synchronous replacements and asynchronous service calls share one
 interface. TypeScript preserves service requirements and error types.
 
@@ -220,7 +234,12 @@ DevTools protocol attachment remains for the bridge while enabled. It creates
 no listening network port. Opening renderer DevTools can detach this bridge;
 close DevTools and reapply if needed.
 
-Replacer failures revert that rule's changes and allow later rules to run. The
+Block handling bounds classification at 1.5 seconds and the combined classification
+and narration work at 3.5 seconds, with at most two narration requests running concurrently.
+A narration deadline reads all original block contents; an individual failure
+reads that block. These recoveries count as transformations, not skipped rules.
+
+Unhandled replacer failures revert that rule's changes and allow later rules to run. The
 default per-rule deadline is four seconds; all sequential calls within each rule
 share its deadline. Large or multiple tables/code blocks may therefore fall back
 to their original speech input. The live speech hook has an eight
@@ -232,12 +251,13 @@ requests. Text is held only during processing, with no persisted cache.
 
 - macOS Read aloud only, including Mac conversations with Remote Control enabled.
   The native iPhone app makes its own speech requests and is unaffected.
-- Filename cleanup only runs inside Markdown inline code, such as
+- Reference cleanup only runs inside Markdown inline code, such as
   `some/file-name.bob`. The whole span must look like a filename with an extension
   or a slash-separated path, using letters, numbers, dots, underscores and hyphens
   (optionally a home-directory prefix). Within those spans, ASCII hyphens and
   underscores become spaces for speech. Plain text, fenced/indented code blocks,
-  command strings, URLs and bare variable names are left alone. Filenames with
+  command strings and URLs are left alone. Snake_case identifiers (including an
+  optional empty `()` suffix) have their underscores read as spaces. Filenames with
   spaces and Windows-style paths are not recognized yet.
 - The table parser ignores fenced code. Table and code-block replacements use
   source offsets to preserve surrounding Markdown.

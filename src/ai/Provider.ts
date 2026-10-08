@@ -1,11 +1,13 @@
 import { OpenAiClient, OpenAiLanguageModel } from "@effect/ai-openai-compat";
 import { Config, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { FetchHttpClient } from "effect/http";
+import { BlockClassifier, ClassifierSettings } from "./BlockClassifier.ts";
 import { TableNarrator } from "./TableNarrator.ts";
 import { CodeNarrator } from "./CodeNarrator.ts";
 import { NarrationFailed } from "./Narration.ts";
 
 export const ProviderSettings = Schema.Struct({
+  classifier: Schema.optional(ClassifierSettings),
   enabled: Schema.Boolean,
   codeEnabled: Schema.Boolean,
   apiKey: Schema.String,
@@ -47,7 +49,22 @@ export const readProviderSettings = Effect.gen(function* () {
     ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
     "SPEECH_AI_REASONING_EFFORT",
   ).pipe(Config.option);
+  const classificationEnabled =
+    codeEnabled &&
+    (yield* Config.Boolean("SPEECH_CLASSIFIER_ENABLED").pipe(
+      Config.withDefault(false),
+    ));
+  const classifier = classificationEnabled
+    ? {
+        apiKey: Redacted.value(yield* Config.Redacted("TYPESAFE_API_KEY")),
+        model: yield* Config.String("TYPESAFE_MODEL").pipe(
+          Config.withDefault("jev-latest"),
+        ),
+        apiUrl: "https://api.typesafe.ai/v1/systemone",
+      }
+    : undefined;
   return {
+    ...(classifier ? { classifier } : {}),
     enabled,
     codeEnabled,
     apiKey: Redacted.value(apiKey),
@@ -73,10 +90,16 @@ export const narratorLayer = (settings: ProviderSettings) => {
     return Layer.mergeAll(
       Layer.succeed(TableNarrator, TableNarrator.of(disabledNarration)),
       disabledCode,
+      BlockClassifier.disabled,
     );
   return Layer.mergeAll(
     TableNarrator.layer,
     settings.codeEnabled ? CodeNarrator.layer : disabledCode,
+    !settings.codeEnabled
+      ? BlockClassifier.disabled
+      : settings.classifier
+        ? BlockClassifier.layer(settings.classifier)
+        : BlockClassifier.verbatim,
   ).pipe(
     Layer.provide(
       OpenAiLanguageModel.layer({
