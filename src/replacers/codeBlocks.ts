@@ -50,8 +50,8 @@ export const codeBlocks = defineReplacer({
                 .trim()
                 .replace(/^(?:code summary|code block)\s*:?\s*/i, "")
                 .trim();
-              const labelOnly = /^(?:code summary|code block)$/i.test(
-                spoken.replace(/[*_`#:.!-]/g, "").trim(),
+              const labelOnly = /^(?:codesummary|codeblock)$/i.test(
+                spoken.replace(/[^\p{L}\p{N}]/gu, ""),
               );
               return /[\p{L}\p{N}]/u.test(spoken) && !labelOnly
                 ? Effect.succeed(spoken)
