@@ -1,5 +1,5 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun";
-import { Console, Effect, FileSystem, Schema } from "effect";
+import { Console, Effect, FileSystem, Path, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { FetchHttpClient } from "effect/http";
 import { Socket } from "effect/socket";
@@ -9,7 +9,6 @@ import { SpeechCleaner } from "../engine/SpeechCleaner.ts";
 import { ClaudeError } from "../claude/protocol.ts";
 import { connectInspector } from "./Inspector.ts";
 
-const root = new URL("../../", import.meta.url).pathname.replace(/\/$/, "");
 const runDesktop = Effect.fn("Cli.desktop")(function* (
   action: "apply" | "status" | "remove",
   wait: boolean,
@@ -17,9 +16,11 @@ const runDesktop = Effect.fn("Cli.desktop")(function* (
   // Read credentials only for apply, never for status/remove.
   const settings = action === "apply" ? yield* readProviderSettings : undefined;
   const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const root = yield* path.fromFileUrl(new URL("../../", import.meta.url));
   const renderer =
     action === "apply"
-      ? yield* fs.readFileString(`${root}/dist/renderer.js`)
+      ? yield* fs.readFileString(path.join(root, "dist/renderer.js"))
       : "";
   if (wait)
     yield* Console.log(
@@ -29,7 +30,7 @@ const runDesktop = Effect.fn("Cli.desktop")(function* (
   const key = "globalThis[Symbol.for('claude-speech-cleaner-desktop')]";
   const operation =
     action === "apply"
-      ? `(() => { const require = process.getBuiltinModule('module').createRequire(process.execPath); const path = ${JSON.stringify(`${root}/dist/desktop.cjs`)}; delete require.cache[require.resolve(path)]; return require(path).install(${JSON.stringify(renderer)}, ${JSON.stringify(settings)}); })()`
+      ? `(() => { const require = process.getBuiltinModule('module').createRequire(process.execPath); const path = ${JSON.stringify(path.join(root, "dist/desktop.cjs"))}; delete require.cache[require.resolve(path)]; return require(path).install(${JSON.stringify(renderer)}, ${JSON.stringify(settings)}); })()`
       : `${key} ? ${key}.${action}() : ({ installed: false })`;
   const result = yield* inspector.evaluate(operation);
   yield* Console.log(JSON.stringify(result, null, 2));
@@ -72,7 +73,7 @@ const preview = Command.make(
 
 Command.make("claude-speech-cleaner").pipe(
   Command.withSubcommands([apply, status, remove, preview]),
-  Command.run({ version: "2.0.0" }),
+  Command.run({ version: "2.0.1" }),
   Effect.provide([
     BunServices.layer,
     FetchHttpClient.layer,

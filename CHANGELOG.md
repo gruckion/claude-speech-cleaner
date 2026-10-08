@@ -1,0 +1,23 @@
+# Changelog
+
+## 2.0.1 — 2026-10-08
+
+First public experimental release for Claude Desktop on macOS.
+
+- Preserve numeric signs, ranges and scientific notation while splitting
+  underscores and hyphens between letters for speech.
+- Support installation from paths containing spaces and non-ASCII characters.
+- Add regression tests for both fixes and CI on macOS and Linux with Bun 1.4.2.
+- Add contributor guidance, private vulnerability reporting instructions,
+  community conduct rules, and issue/PR templates.
+
+## 2.0.0 — 2026-10-08
+
+- Move the pipeline to Effect 4 TypeScript with independent registered replacers.
+- Add opt-in AI narration of Markdown tables through an OpenAI-compatible provider.
+- Add scoped debugger cleanup, cancellation, module discovery, and speech-only
+  transformation before Claude's Markdown processing.
+
+## 1.0.0
+
+- Initial local JavaScript speech cleanup and reapplication helper.

@@ -1,19 +1,25 @@
 # Claude speech cleaner
 
+[![CI](https://github.com/gruckion/claude-speech-cleaner/actions/workflows/ci.yml/badge.svg)](https://github.com/gruckion/claude-speech-cleaner/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 An **Effect 4 TypeScript** pipeline for making Claude Desktop's Read aloud easier
 to follow. It changes only the text passed to speech: conversation history,
 generated code, files, clipboard and keyboard input stay untouched.
 
-- Replace filename hyphens and underscores with spaces.
+- Replace underscores and hyphens between letters with spaces, preserving numeric signs.
 - Turn Markdown tables into spoken prose using an LLM.
 - Add named, independently testable replacers in one registration file.
 
 This is an unofficial macOS runtime modification, not a Claude Code plugin or an
 Anthropic-supported extension. It leaves Claude's installed files unchanged.
+**Experimental:** tested with Claude Desktop 2.26454.2. Private Claude interfaces
+can change. The native iPhone app's Read aloud is not modified.
 
 ## Install and enable
 
-Requires macOS, Claude at `/Applications/Claude.app`, Git and [Bun](https://bun.sh).
+Requires macOS, Claude at `/Applications/Claude.app`, Git and
+[Bun](https://bun.sh) 1.4.2 or newer. CI uses Bun 1.4.2.
 
 ```sh
 git clone https://github.com/gruckion/claude-speech-cleaner.git
@@ -39,6 +45,7 @@ original wording and the separator replacer still runs.
 
 ```sh
 cp .env.example .env
+chmod 600 .env
 ```
 
 Set these in `.env`:
@@ -172,7 +179,9 @@ no listening network port. Opening renderer DevTools can detach this bridge;
 close DevTools and reapply if needed.
 
 Replacer failures revert that rule's changes and allow later rules to run. The
-default per-rule deadline is four seconds; the live speech hook has an eight
+default per-rule deadline is four seconds; all sequential table calls in one
+response share that deadline. Large or multiple tables may therefore fall back
+to their original wording. The live speech hook has an eight
 second overall deadline, after which it speaks the original text. Inputs over
 100,000 characters bypass transformations. Each renderer allows four concurrent
 requests. Text is held only during processing, with no persisted cache.
@@ -181,8 +190,11 @@ requests. Text is held only during processing, with no persisted cache.
 
 - macOS Read aloud only, including Mac conversations with Remote Control enabled.
   The native iPhone app makes its own speech requests and is unaffected.
-- The separator rule is literal. It also replaces ASCII minus signs and command
-  flags in speech; Unicode dashes remain. Remove or refine that rule if unwanted.
+- The separator rule changes underscores and single ASCII hyphens between letters
+  (`release-notes` becomes `release notes`). Numeric signs, `3-5` ranges,
+  scientific notation such as `1e-3`, digit-adjacent hyphens (`version-2`), and
+  Unicode dashes remain. This is a text rule, not a full parser for code or math;
+  refine or remove it for specialized notation.
 - The GFM parser ignores fenced code. Tables are replaced by source offsets so
   surrounding Markdown is preserved by the table rule.
 - Claude's speech interface and loader are private and may change. Discovery
@@ -211,4 +223,15 @@ the real Effect provider's HTTP contract against a local server, and speech
 cancellation/restoration. They use synthetic data and no paid API calls. Live
 provider configuration and audible verification are separate checks.
 
-See [the design plan](docs/refactor-plan.md). MIT licensed; independent of Anthropic.
+CI runs these checks and a dependency audit on macOS and Linux. The CLI regression
+test isolates its network calls so it never connects to a running Claude app.
+
+## Contribute and report problems
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and extension contracts.
+Use [issues](https://github.com/gruckion/claude-speech-cleaner/issues) for bugs and
+proposals, and [SECURITY.md](SECURITY.md) to report vulnerabilities privately.
+Participation follows our [code of conduct](CODE_OF_CONDUCT.md).
+
+See [the changelog](CHANGELOG.md), [the design plan](docs/refactor-plan.md), and
+[verification notes](docs/verification.md). MIT licensed; independent of Anthropic.

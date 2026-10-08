@@ -5,6 +5,16 @@ import { separators } from "../src/replacers/index.ts";
 import { pullRequests } from "../examples/custom-replacer.ts";
 import { SpeechCleaner } from "../src/engine/SpeechCleaner.ts";
 
+test("filename cleanup preserves numeric signs, ranges and scientific notation", async () => {
+  const clean = await Effect.runPromise(createSpeechCleaner([separators]));
+  const input =
+    "Open my_project/release-notes.md. Balance -£12; temperature -5; delta -.5; range 3-5; precision 1e-3. Check café-notes and version-2.";
+  const result = await Effect.runPromise(clean(input));
+  expect(result.text).toBe(
+    "Open my project/release notes.md. Balance -£12; temperature -5; delta -.5; range 3-5; precision 1e-3. Check café notes and version-2.",
+  );
+});
+
 test("registered rules compose in order with dependencies and scoped matching", async () => {
   class Vocabulary extends Context.Service<
     Vocabulary,

@@ -1,10 +1,11 @@
 import { Effect } from "effect";
 import { defineReplacer } from "../engine/Replacer.ts";
 
-/** Literal speech-only cleanup; also affects minus signs and command flags. */
+/** Split word separators without discarding signs, ranges or numeric notation. */
 export const separators = defineReplacer({
   id: "separators",
-  description: "Read ASCII hyphens and underscores as spaces",
+  description: "Read underscores and hyphens between letters as spaces",
   matches: (text) => /[-_]/.test(text),
-  replace: (text) => Effect.succeed(text.replace(/[-_]+/g, " ")),
+  replace: (text) =>
+    Effect.succeed(text.replace(/_+|(?<=\p{L})-(?=\p{L})/gu, " ")),
 });
