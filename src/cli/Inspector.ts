@@ -4,6 +4,11 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { Socket } from "effect/socket";
 import { ClaudeError } from "../claude/protocol.ts";
 
+export class DebuggerUnavailable extends Schema.TaggedError<DebuggerUnavailable>()(
+  "DebuggerUnavailable",
+  {},
+) {}
+
 const Target = Schema.Struct({
   title: Schema.String,
   webSocketDebuggerUrl: Schema.String,
@@ -48,15 +53,7 @@ export const connectInspector = Effect.fn("Inspector.connect")(function* (
     wait
       ? find.pipe(Effect.retry(Schedule.spaced(1000)), Effect.timeout(120000))
       : find
-  ).pipe(
-    Effect.mapError(
-      () =>
-        new ClaudeError({
-          message:
-            "Choose Developer → Enable Main Process Debugger in Claude, then retry.",
-        }),
-    ),
-  );
+  ).pipe(Effect.mapError(() => new DebuggerUnavailable()));
   const pid = target.title.match(/\[(\d+)\]$/)?.[1];
   const listeners = yield* spawner.string(
     ChildProcess.make("/usr/sbin/lsof", [
@@ -129,7 +126,10 @@ export const connectInspector = Effect.fn("Inspector.connect")(function* (
           (deferred) =>
             Deferred.fail(
               deferred,
-              new ClaudeError({ message: "Debugger disconnected" }),
+              new ClaudeError({
+                message:
+                  "The connection to Claude was interrupted. Enable Developer → Enable Main Process Debugger, then run bun run status to check the patch before retrying.",
+              }),
             ),
           { discard: true },
         ),

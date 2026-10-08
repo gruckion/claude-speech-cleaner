@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.1 — 2026-10-08
+
+- Render expected debugger failures through Effect CLI user errors instead of
+  runtime stack traces. Explain how to enable the debugger and show the exact
+  apply/remove/status command to retry while preserving a nonzero exit status.
+- Distinguish initial connection failure from interruption or timeout after an
+  operation may have started, and retain scoped debugger cleanup.
+
 ## 2.1.0 — 2026-10-08
 
 - Add separately opt-in code-block explanations before Claude removes code fences

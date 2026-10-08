@@ -185,6 +185,11 @@ bun run status
 bun run remove
 ```
 
+If Claude cannot be reached, the command prints the menu steps and the exact
+command to retry, without a stack trace. No patch changes are made when the
+initial connection fails. Enable the debugger again for each command; it closes
+automatically afterwards. Connection errors still return a nonzero exit status.
+
 `pages[].active` verifies installation. `changed` counts transformed speech
 requests, and `skipped` counts failed/disabled replacers. No message text is
 logged. Removal detaches listeners, cancels pending work and restores the
