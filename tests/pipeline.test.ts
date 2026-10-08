@@ -5,14 +5,43 @@ import { separators } from "../src/replacers/index.ts";
 import { pullRequests } from "../examples/custom-replacer.ts";
 import { SpeechCleaner } from "../src/engine/SpeechCleaner.ts";
 
-test("filename cleanup preserves numeric signs, ranges and scientific notation", async () => {
+test("separator cleanup targets only inline code containing a file reference", async () => {
   const clean = await Effect.runPromise(createSpeechCleaner([separators]));
-  const input =
-    "Open my_project/release-notes.md. Balance -£12; temperature -5; delta -.5; range 3-5; precision 1e-3. Check café-notes and version-2.";
-  const result = await Effect.runPromise(clean(input));
-  expect(result.text).toBe(
-    "Open my project/release notes.md. Balance -£12; temperature -5; delta -.5; range 3-5; precision 1e-3. Check café notes and version-2.",
-  );
+  const cases: ReadonlyArray<readonly [string, string]> = [
+    ["Open `some/file-name.bob`.", "Open `some/file name.bob`."],
+    [
+      "Use `my_file-name.ts` and `~/café_notes/version-2/`.",
+      "Use `my file name.ts` and `~/café notes/version 2/`.",
+    ],
+    [
+      "See **`./my_project/read-me.md`** and ``other_file.md``.",
+      "See **`./my project/read me.md`** and ``other file.md``.",
+    ],
+    [
+      "Plain my_project/release-notes.md and follow-up.",
+      "Plain my_project/release-notes.md and follow-up.",
+    ],
+    [
+      "`-12` `-£12` `-.5` `3-5` `1e-3` `some_variable` `--dry-run`",
+      "`-12` `-£12` `-.5` `3-5` `1e-3` `some_variable` `--dry-run`",
+    ],
+    [
+      "`git diff --stat file-name.ts` and `https://example.com/my_file`",
+      "`git diff --stat file-name.ts` and `https://example.com/my_file`",
+    ],
+    [
+      "```md\n`some/file-name.bob`\n```\n\n    `other_file.md`",
+      "```md\n`some/file-name.bob`\n```\n\n    `other_file.md`",
+    ],
+    [
+      "\\`some/file-name.bob\\` and `unclosed_file.md",
+      "\\`some/file-name.bob\\` and `unclosed_file.md",
+    ],
+  ];
+  for (const [input, expected] of cases) {
+    const result = await Effect.runPromise(clean(input));
+    expect(result.text).toBe(expected);
+  }
 });
 
 test("registered rules compose in order with dependencies and scoped matching", async () => {
@@ -28,7 +57,7 @@ test("registered rules compose in order with dependencies and scoped matching", 
       return text + (yield* Vocabulary).name;
     }),
   });
-  const input = "PR #42 in my_project";
+  const input = "PR #42 in `my_project/`";
   const result = await Effect.runPromise(
     SpeechCleaner.use((cleaner) => cleaner.replace(input)).pipe(
       Effect.provide(
@@ -39,12 +68,12 @@ test("registered rules compose in order with dependencies and scoped matching", 
     ),
   );
   expect(result).toEqual({
-    text: "pull request 42 in my project for Claude",
+    text: "pull request 42 in `my project/` for Claude",
     applied: true,
     changes: ["pull-requests", "separators", "vocabulary"],
     skipped: [],
   });
-  expect(input).toBe("PR #42 in my_project");
+  expect(input).toBe("PR #42 in `my_project/`");
 });
 
 test("failed, throwing, and timed-out replacers preserve prior text and let later rules run", async () => {
@@ -74,10 +103,10 @@ test("failed, throwing, and timed-out replacers preserve prior text and let late
         ],
         { timeoutMs: 10 },
       );
-      return yield* clean("my_file-name");
+      return yield* clean("`my_file-name.md`");
     }),
   );
-  expect(result.text).toBe("my file name");
+  expect(result.text).toBe("`my file name.md`");
   expect(result.skipped).toEqual(["failure", "defect", "slow"]);
   expect(result.changes).toEqual(["separators"]);
 });

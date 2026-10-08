@@ -7,7 +7,7 @@ An **Effect 4 TypeScript** pipeline for making Claude Desktop's Read aloud easie
 to follow. It changes only the text passed to speech: conversation history,
 generated code, files, clipboard and keyboard input stay untouched.
 
-- Replace underscores and hyphens between letters with spaces, preserving numeric signs.
+- Read separators in backtick-wrapped filenames and paths as spaces.
 - Turn Markdown tables into spoken prose using an LLM.
 - Add named, independently testable replacers in one registration file.
 
@@ -132,10 +132,10 @@ import { separators } from "./src/replacers/index.ts";
 const result = await Effect.runPromise(
   Effect.gen(function* () {
     const clean = yield* createSpeechCleaner([separators]);
-    return yield* clean("my_project/release-notes.md");
+    return yield* clean("`my_project/release-notes.md`");
   }),
 );
-// { text: "my project/release notes.md", applied: true,
+// { text: "`my project/release notes.md`", applied: true,
 //   changes: ["separators"], skipped: [] }
 ```
 
@@ -190,11 +190,13 @@ requests. Text is held only during processing, with no persisted cache.
 
 - macOS Read aloud only, including Mac conversations with Remote Control enabled.
   The native iPhone app makes its own speech requests and is unaffected.
-- The separator rule changes underscores and single ASCII hyphens between letters
-  (`release-notes` becomes `release notes`). Numeric signs, `3-5` ranges,
-  scientific notation such as `1e-3`, digit-adjacent hyphens (`version-2`), and
-  Unicode dashes remain. This is a text rule, not a full parser for code or math;
-  refine or remove it for specialized notation.
+- Filename cleanup only runs inside Markdown inline code, such as
+  `some/file-name.bob`. The whole span must look like a filename with an extension
+  or a slash-separated path, using letters, numbers, dots, underscores and hyphens
+  (optionally a home-directory prefix). Within those spans, ASCII hyphens and
+  underscores become spaces for speech. Plain text, fenced/indented code blocks,
+  command strings, URLs and bare variable names are left alone. Filenames with
+  spaces and Windows-style paths are not recognized yet.
 - The GFM parser ignores fenced code. Tables are replaced by source offsets so
   surrounding Markdown is preserved by the table rule.
 - Claude's speech interface and loader are private and may change. Discovery
