@@ -311,6 +311,7 @@ export async function install(
             installed: active,
             appVersion: app.getVersion(),
             aiEnabled: settings.enabled,
+            codeNarrationEnabled: settings.enabled && settings.codeEnabled,
             failures,
             injections,
             pages: statuses,
