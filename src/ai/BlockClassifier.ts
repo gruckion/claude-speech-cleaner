@@ -7,11 +7,7 @@ import {
 } from "effect/http";
 import { NarrationFailed } from "./Narration.ts";
 
-export const ClassifierSettings = Schema.Struct({
-  apiKey: Schema.String,
-  model: Schema.String,
-  apiUrl: Schema.String,
-});
+import { ClassifierSettings } from "./ClassifierSettings.ts";
 
 const Probability = Schema.Finite.pipe(
   Schema.check(Schema.isBetween({ minimum: 0, maximum: 1 })),

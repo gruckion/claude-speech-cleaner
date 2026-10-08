@@ -1,7 +1,9 @@
 import { OpenAiClient, OpenAiLanguageModel } from "@effect/ai-openai-compat";
 import { Config, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { FetchHttpClient } from "effect/http";
-import { BlockClassifier, ClassifierSettings } from "./BlockClassifier.ts";
+import { BlockClassifier } from "./BlockClassifier.ts";
+import { ClassifierSettings } from "./ClassifierSettings.ts";
+import { HashClassifier } from "./HashClassifier.ts";
 import { TableNarrator } from "./TableNarrator.ts";
 import { CodeNarrator } from "./CodeNarrator.ts";
 import { NarrationFailed } from "./Narration.ts";
@@ -10,6 +12,7 @@ export const ProviderSettings = Schema.Struct({
   classifier: Schema.optional(ClassifierSettings),
   enabled: Schema.Boolean,
   codeEnabled: Schema.Boolean,
+  hashEnabled: Schema.optional(Schema.Boolean),
   apiKey: Schema.String,
   apiUrl: Schema.String,
   model: Schema.String,
@@ -42,6 +45,9 @@ export const readProviderSettings = Effect.gen(function* () {
   const codeEnabled = yield* Config.Boolean("SPEECH_AI_CODE_ENABLED").pipe(
     Config.withDefault(false),
   );
+  const hashEnabled = yield* Config.Boolean("SPEECH_AI_HASH_ENABLED").pipe(
+    Config.withDefault(false),
+  );
   const apiKey = yield* Config.Redacted("SPEECH_AI_API_KEY");
   const apiUrl = yield* Config.String("SPEECH_AI_BASE_URL");
   const model = yield* Config.String("SPEECH_AI_MODEL");
@@ -50,7 +56,7 @@ export const readProviderSettings = Effect.gen(function* () {
     "SPEECH_AI_REASONING_EFFORT",
   ).pipe(Config.option);
   const classificationEnabled =
-    codeEnabled &&
+    (codeEnabled || hashEnabled) &&
     (yield* Config.Boolean("SPEECH_CLASSIFIER_ENABLED").pipe(
       Config.withDefault(false),
     ));
@@ -67,6 +73,7 @@ export const readProviderSettings = Effect.gen(function* () {
     ...(classifier ? { classifier } : {}),
     enabled,
     codeEnabled,
+    hashEnabled,
     apiKey: Redacted.value(apiKey),
     apiUrl,
     model,
@@ -91,10 +98,14 @@ export const narratorLayer = (settings: ProviderSettings) => {
       Layer.succeed(TableNarrator, TableNarrator.of(disabledNarration)),
       disabledCode,
       BlockClassifier.disabled,
+      HashClassifier.disabled,
     );
   return Layer.mergeAll(
     TableNarrator.layer,
     settings.codeEnabled ? CodeNarrator.layer : disabledCode,
+    settings.hashEnabled && settings.classifier
+      ? HashClassifier.layer(settings.classifier)
+      : HashClassifier.disabled,
     !settings.codeEnabled
       ? BlockClassifier.disabled
       : settings.classifier

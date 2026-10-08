@@ -312,6 +312,11 @@ export async function install(
             appVersion: app.getVersion(),
             aiEnabled: settings.enabled,
             codeNarrationEnabled: settings.enabled && settings.codeEnabled,
+            hashClassificationEnabled: !!(
+              settings.enabled &&
+              settings.hashEnabled &&
+              settings.classifier
+            ),
             blockClassificationEnabled:
               settings.enabled &&
               settings.codeEnabled &&
