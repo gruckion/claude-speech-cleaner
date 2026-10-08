@@ -1,152 +1,214 @@
 # Claude speech cleaner
 
-A local Mac patch that replaces ASCII hyphens and underscores with spaces
-**only in the text sent to Claude Read aloud**. It leaves the displayed
-conversation, generated code, clipboard and files untouched.
+An **Effect 4 TypeScript** pipeline for making Claude Desktop's Read aloud easier
+to follow. It changes only the text passed to speech: conversation history,
+generated code, files, clipboard and keyboard input stay untouched.
 
-**Installed and tested on Claude Desktop 2.26454.0 on 8 October 2026.**
-The real Read aloud button sent cleaned text, received audio, and played it.
-Manual testing confirmed correct pronunciation and normal keyboard input. This is a local modification,
-not an official Claude plugin or an Anthropic-supported integration.
+- Replace filename hyphens and underscores with spaces.
+- Turn Markdown tables into spoken prose using an LLM.
+- Add named, independently testable replacers in one registration file.
 
-## Setup
+This is an unofficial macOS runtime modification, not a Claude Code plugin or an
+Anthropic-supported extension. It leaves Claude's installed files unchanged.
 
-Requirements: macOS, Claude Desktop installed at `/Applications/Claude.app`,
-[Bun](https://bun.sh), and Git. There are no package dependencies to install.
+## Install and enable
+
+Requires macOS, Claude at `/Applications/Claude.app`, Git and [Bun](https://bun.sh).
 
 ```sh
 git clone https://github.com/gruckion/claude-speech-cleaner.git
 cd claude-speech-cleaner
-```
-
-In Claude, choose **Help → Troubleshooting → Enable Developer Mode** once.
-This restarts Claude, so finish active work first. Developer mode is a user
-setting that normally survives app updates.
-
-## Enable or reapply after restarting Claude
-
-The patch survives switching conversations and reloading the conversation
-interface. **It does not survive quitting/restarting the entire Claude app.**
-Claude's installed files and signature are unchanged.
-
-1. Open Claude Desktop and a conversation.
-2. Double-click `reapply.command` in this folder.
-3. In Claude, choose **Developer → Enable Main Process Debugger**.
-
-The command waits up to two minutes for that menu action, installs the patch,
-reports its status, and closes the temporary debugger. You do not need to quit
-Claude to reapply. Repeating the command replaces the previous installation
-without accumulating duplicate hooks.
-
-From a terminal, the equivalent is:
-
-```sh
+bun install --frozen-lockfile
 bun run apply
 ```
 
-## Check it after an update
+In Claude, enable **Help → Troubleshooting → Enable Developer Mode** once. This
+restarts Claude, so finish active work first. Then open a conversation and choose
+**Developer → Enable Main Process Debugger** when the command asks. It waits up
+to two minutes, installs the hook and closes the temporary main-process debugger.
+You can also double-click `reapply.command`.
 
-After reapplying, use Read aloud on a response containing a name such as
-`my_project/release-notes.md`. Then enable the main-process debugger again and
-run:
+The hook survives conversation switches and page reloads. **Reapply after a full
+Claude restart or update**, or after editing replacers. Reapplying replaces the
+previous installation. No background shell process needs to stay running.
+
+## Configure table narration
+
+Table narration is opt-in. Without a configured provider, tables retain their
+original wording and the separator replacer still runs.
+
+```sh
+cp .env.example .env
+```
+
+Set these in `.env`:
+
+```dotenv
+SPEECH_AI_ENABLED=true
+SPEECH_AI_BASE_URL=https://api.openai.com/v1
+SPEECH_AI_API_KEY=your-key
+SPEECH_AI_MODEL=your-model
+```
+
+The included provider uses Effect's OpenAI-compatible **chat completions**
+integration. Set the base URL and model to those supported by your provider.
+Do not assume a proprietary structured-decision API supports chat completions.
+Bun loads `.env` when the CLI starts. The file is ignored by Git. Keys remain in
+the CLI/main process and are never injected into the renderer or status output.
+
+Preview with a synthetic example before applying:
+
+```sh
+bun run preview examples/table.md
+bun run apply
+```
+
+Only recognized table source is sent to the model, not the surrounding response
+or chat history. Each table is narrated with instructions to retain row/column
+associations, values, signs, units and caveats. This is generated text: fidelity
+is not guaranteed. Empty or truncated responses, provider errors and timeouts
+leave that replacer's input unchanged. There is no silent change of provider.
+
+`TableNarrator.layer` depends on Effect's `LanguageModel`, so an Anthropic,
+OpenAI, local-model or other Effect provider Layer can replace the supplied
+configuration in `src/ai/Provider.ts` without changing the table replacer or engine.
+
+## Add a replacer
+
+The interface follows [URL Migrations](https://github.com/gruckion/url-migrations):
+an ordered list of small rules, optional matching, and an immutable result.
+
+Create a file such as `src/replacers/pullRequests.ts`:
+
+```ts
+import { Effect } from "effect";
+import { defineReplacer } from "../index.ts";
+
+export const pullRequests = defineReplacer({
+  id: "pull-requests",
+  description: "Expand PR numbers for speech",
+  matches: (text) => /\bPR #\d+\b/.test(text),
+  replace: (text) =>
+    Effect.succeed(text.replace(/\bPR #(\d+)\b/g, "pull request $1")),
+});
+```
+
+Register it in **`speech.config.ts`**:
+
+```ts
+import { markdownTables, separators } from "./src/replacers/index.ts";
+import { pullRequests } from "./src/replacers/pullRequests.ts";
+
+export const replacers = [markdownTables, separators, pullRequests];
+```
+
+Run `bun run check`, then reapply. **No engine or Claude adapter edits needed.**
+[`examples/custom-replacer.ts`](examples/custom-replacer.ts) is a runnable version.
+
+Rules receive the preceding rule's output. Parse tables before stripping
+punctuation. IDs must be unique. A matcher is optional; `replace` returns an
+Effect, so synchronous replacements and asynchronous service calls share one
+interface. TypeScript preserves service requirements and error types.
+
+For an asynchronous rule, use `Effect.fn` and `yield*` a service. Provide its Layer
+at the application composition point (`src/engine/SpeechCleaner.ts` and the host
+composition), just as the table rule uses `TableNarrator`. The engine needs no
+new rule types or switch cases.
+
+You can also use the pipeline independently of Claude:
+
+```ts
+import { Effect } from "effect";
+import { createSpeechCleaner } from "./src/index.ts";
+import { separators } from "./src/replacers/index.ts";
+
+const result = await Effect.runPromise(
+  Effect.gen(function* () {
+    const clean = yield* createSpeechCleaner([separators]);
+    return yield* clean("my_project/release-notes.md");
+  }),
+);
+// { text: "my project/release notes.md", applied: true,
+//   changes: ["separators"], skipped: [] }
+```
+
+## Check or turn off
+
+Enable **Developer → Enable Main Process Debugger** before each command:
 
 ```sh
 bun run status
-```
-
-`active: true` means the wrapper is installed. A nonzero `changedFrames` means
-it has rewritten an actual speech request since the current page loaded.
-Zero before using Read aloud is normal. If it remains zero after reading text
-containing a hyphen or underscore, Claude may have changed its speech protocol;
-the patch needs another audit. Installation alone does not prove a new app
-version remains compatible. Reloading the page resets renderer counters.
-
-`injections` counts successful renderer installations during this app run.
-No message text is retained in status or logs.
-
-## Remove
-
-Enable **Developer → Enable Main Process Debugger**, then run:
-
-```sh
 bun run remove
 ```
 
-This removes the page-load hooks and restores the original WebSocket sender.
-Quitting Claude also removes the runtime patch. Reloading a page does not,
-because the installed loader re-applies it. If another script has wrapped the
-sender after this patch, removal reports `removed: false`; quit and reopen
-Claude to clear runtime modifications without overwriting that other script.
+`pages[].active` verifies installation. `changed` counts transformed speech
+requests, and `skipped` counts failed/disabled replacers. No message text is
+logged. Removal detaches listeners, cancels pending work and restores the
+original speech methods. Quitting Claude also removes the runtime modification.
+If another tool replaced those methods, removal reports failure; restart Claude
+rather than overwriting the other tool's changes.
 
-The only persistent Claude setting changed by setup is `allowDevTools: true`
-in `~/Library/Application Support/Claude/developer_settings.json`. This keeps
-the Developer menu available; it does not keep a debugger port open. To undo
-that setup too, set it to false (preserving other settings) and restart Claude.
+## Architecture
 
-## Exact changes
+| Location           | Responsibility                                                  |
+| ------------------ | --------------------------------------------------------------- |
+| `speech.config.ts` | Ordered replacer registration                                   |
+| `src/engine/`      | Interface, registry validation, execution, timeout and fallback |
+| `src/replacers/`   | Individual text transformations                                 |
+| `src/ai/`          | Table narration service and provider composition                |
+| `src/claude/`      | Claude module discovery, renderer hook and Electron lifecycle   |
+| `src/cli/`         | Effect CLI, verified inspector connection and commands          |
 
-- `renderer.js` wraps `WebSocket.prototype.send`. It changes only string JSON
-  `text_chunk` frames sent to the exact same-host endpoint
-  `/api/ws/text_to_speech/text_stream`, using
-  `frame.text.replace(/[-_]+/g, " ")`.
-- `desktop.mjs` installs that script into the `https://claude.ai` renderer,
-  watches for new web contents and `dom-ready`, and provides status/removal.
-- `cli.mjs` connects temporarily to Claude's own Node inspector on loopback
-  port 9229. It verifies the listening PID and executable before installing,
-  then verifies the debugger closed. It does not modify `app.asar`, re-sign
-  Claude, install certificates, or change the CLI engine.
-- `reapply.command` provides the double-click entry point.
+The old WebSocket interception was too late: Claude had already removed table
+pipes and separator rows. The new adapter transforms the complete Markdown input
+to the Read aloud engine **before** Claude cleans/chunks it. A scoped Electron
+`Runtime.addBinding` bridge runs transformations in the main process; the renderer
+receives only the transformed text. Stop and later requests cancel pending work
+so delayed responses cannot restart speech.
 
-The wrapper copies a speech frame; it never edits the original assistant
-message. Other JSON fields, non-speech messages, unrelated endpoints, binary
-frames and malformed JSON pass through unchanged.
+The temporary main-process inspector closes after each command. A renderer
+DevTools protocol attachment remains for the bridge while enabled. It creates
+no listening network port. Opening renderer DevTools can detach this bridge;
+close DevTools and reapply if needed.
 
-The replacement is literal: it also removes ASCII hyphens in negative numbers
-and command flags from speech. Those characters remain intact on screen and
-in files. Unicode dashes are unchanged.
+Replacer failures revert that rule's changes and allow later rules to run. The
+default per-rule deadline is four seconds; the live speech hook has an eight
+second overall deadline, after which it speaks the original text. Inputs over
+100,000 characters bypass transformations. Each renderer allows four concurrent
+requests. Text is held only during processing, with no persisted cache.
 
-## Desktop and phone
+## Compatibility and limitations
 
-This changes Read aloud **when pressed on the Mac**, including conversations
-with Remote Control enabled. It does not change Read aloud in the native iPhone app, even when
-that phone is controlling a session hosted on the Mac: the phone owns its
-speech request.
+- macOS Read aloud only, including Mac conversations with Remote Control enabled.
+  The native iPhone app makes its own speech requests and is unaffected.
+- The separator rule is literal. It also replaces ASCII minus signs and command
+  flags in speech; Unicode dashes remain. Remove or refine that rule if unwanted.
+- The GFM parser ignores fenced code. Tables are replaced by source offsets so
+  surrounding Markdown is preserved by the table rule.
+- Claude's speech interface and loader are private and may change. Discovery
+  follows the loaded first-party module loader instead of pinning an asset hash.
+  After updating Claude, verify actual Read aloud as well as installation status.
+- Version 1 was audibly verified on Desktop 2.26454.0. The Effect adapter was
+  installed on 2.26454.2 and sent cleaned filename text through the actual speech
+  engine, receiving audio frames. This does not establish compatibility with
+  future versions or narration accuracy from every provider.
 
-## Verification
-
-- Real Desktop button: receiver-side network observation confirmed the exact
-  cleaned `text_chunk` and hundreds of incoming audio frames. Original
-  punctuation remained visible; user confirmed correct speech.
-- Removed patch: the same real button sent original punctuation again.
-- Reapplied patch and reloaded: loader remained active, injection count rose
-  from one to two, with zero reported injection failures.
-- `bun test`: real loopback WebSocket receiver checks 16 assertions covering
-  replacement, metadata, endpoint/hostname isolation, control and binary
-  frames, malformed data, duplicate installation, and undo. A temporary copy
-  with replacement disabled failed on the expected text mismatch.
-
-The earlier audit traced Anthropic's
-[Read aloud engine](https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/cb17312fe-B2ml4MUo.js)
-and [same-origin speech transport](https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/c6f15305a-B18LsM8F.js).
-Claude Code's `audio.speak` mod API uses system speech and does not intercept
-this built-in renderer path.
-
-## Development and contributions
+## Development
 
 ```sh
-bun test
+bun install --frozen-lockfile
+bun run check
 ```
 
-The automated test uses a local WebSocket receiver and does not connect to
-Claude or change a running app. To check an app update, also perform the manual
-Read aloud and removal checks above. Include the Claude version, macOS version,
-and sanitized status output when reporting a compatibility issue. Do not share
-conversation contents or debugger URLs.
+Effect and its provider/platform packages are pinned to 4.0.1. Read the installed
+`node_modules/effect/AGENTS.md` and `ai-docs` before changing Effect APIs; many web
+examples describe Effect 3. The build produces a browser IIFE and a Node
+CommonJS bundle. Electron is a type/build dependency; the installed Claude app
+provides the actual Electron runtime.
 
-Small, focused pull requests are welcome. Changes should preserve the boundary
-between speech requests and ordinary conversation traffic, as well as clean
-removal and repeatable installation.
+Tests cover public rule composition and recovery, GFM source preservation,
+the real Effect provider's HTTP contract against a local server, and speech
+cancellation/restoration. They use synthetic data and no paid API calls. Live
+provider configuration and audible verification are separate checks.
 
-## License
-
-[MIT](LICENSE). This project is independent of Anthropic.
+See [the design plan](docs/refactor-plan.md). MIT licensed; independent of Anthropic.

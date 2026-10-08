@@ -6,5 +6,5 @@ if [[ ! -x "$bun_path" ]]; then
   print 'Bun is required. Install it from https://bun.sh then run this again.'
   exit 1
 fi
-"$bun_path" cli.mjs apply --wait
+"$bun_path" run apply
 if [[ -t 0 ]]; then read -r '?Press Enter to close…'; fi

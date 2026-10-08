@@ -1,18 +1,46 @@
 {
   "name": "claude-speech-cleaner",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "bun run src/build.ts",
     "test": "bun test",
-    "apply": "bun cli.mjs apply --wait",
-    "status": "bun cli.mjs status",
-    "remove": "bun cli.mjs remove"
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "check": "prettier --check . && bun run typecheck && bun test && bun run build",
+    "apply": "bun run build && bun src/cli/main.ts apply --wait",
+    "status": "bun src/cli/main.ts status",
+    "remove": "bun src/cli/main.ts remove",
+    "preview": "bun src/cli/main.ts preview"
   },
   "description": "Speech-only punctuation cleanup for Claude Desktop on macOS.",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/gruckion/claude-speech-cleaner.git"
+  },
+  "dependencies": {
+    "@effect/ai-openai-compat": "4.0.1",
+    "@effect/platform-bun": "4.0.1",
+    "effect": "4.0.1",
+    "mdast-util-from-markdown": "2.1.0",
+    "mdast-util-gfm-table": "2.0.0",
+    "micromark-extension-gfm-table": "2.1.2"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "@types/mdast": "4.0.4",
+    "electron": "44.7.0",
+    "esbuild": "0.28.2",
+    "prettier": "3.9.9",
+    "typescript": "7.0.2"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./replacers": "./src/replacers/index.ts"
+  },
+  "overrides": {
+    "@effect/platform-node-shared": "4.0.1"
   }
 }
