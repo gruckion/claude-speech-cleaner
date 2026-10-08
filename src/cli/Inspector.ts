@@ -1,4 +1,4 @@
-import { Deferred, Effect, Schedule, Schema } from "effect";
+import { Console, Deferred, Effect, Schedule, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { Socket } from "effect/socket";
@@ -180,5 +180,21 @@ export const connectInspector = Effect.fn("Inspector.connect")(function* (
           "Debugger remains open. Disable Developer → Enable Main Process Debugger.",
       });
   });
-  return { evaluate, shutdown };
+  yield* Effect.addFinalizer(() =>
+    shutdown.pipe(
+      Effect.timeout(5000),
+      Effect.catchCause(() =>
+        Console.error(
+          "Could not close Claude's debugger. Disable Developer → Enable Main Process Debugger.",
+        ).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              process.exitCode = 1;
+            }),
+          ),
+        ),
+      ),
+    ),
+  );
+  return { evaluate };
 });

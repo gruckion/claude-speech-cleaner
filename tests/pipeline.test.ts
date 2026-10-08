@@ -3,6 +3,7 @@ import { Context, Effect, Layer } from "effect";
 import { createSpeechCleaner, defineReplacer } from "../src/index.ts";
 import { separators } from "../src/replacers/index.ts";
 import { pullRequests } from "../examples/custom-replacer.ts";
+import { SpeechCleaner } from "../src/engine/SpeechCleaner.ts";
 
 test("registered rules compose in order with dependencies and scoped matching", async () => {
   class Vocabulary extends Context.Service<
@@ -19,14 +20,13 @@ test("registered rules compose in order with dependencies and scoped matching", 
   });
   const input = "PR #42 in my_project";
   const result = await Effect.runPromise(
-    Effect.gen(function* () {
-      const clean = yield* createSpeechCleaner([
-        pullRequests,
-        separators,
-        custom,
-      ]);
-      return yield* clean(input);
-    }).pipe(Effect.provide(Layer.succeed(Vocabulary, { name: " for Claude" }))),
+    SpeechCleaner.use((cleaner) => cleaner.replace(input)).pipe(
+      Effect.provide(
+        SpeechCleaner.layer([pullRequests, separators, custom]).pipe(
+          Layer.provide(Layer.succeed(Vocabulary, { name: " for Claude" })),
+        ),
+      ),
+    ),
   );
   expect(result).toEqual({
     text: "pull request 42 in my project for Claude",

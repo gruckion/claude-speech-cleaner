@@ -10,7 +10,8 @@ import {
   Semaphore,
 } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
-import { narratorLayer, type ProviderSettings } from "../ai/Provider.ts";
+import { type ProviderSettings } from "../ai/Provider.ts";
+import { cleanerLayer } from "../../speech.config.ts";
 import { SpeechCleaner } from "../engine/SpeechCleaner.ts";
 import { discoverSpeechModule } from "./discovery.ts";
 import { bindingName, ClaudeError, Request } from "./protocol.ts";
@@ -61,10 +62,7 @@ export async function install(
       "The previous hook could not be restored. Restart Claude before applying.",
     );
   const runtime = ManagedRuntime.make(
-    SpeechCleaner.layer.pipe(
-      Layer.provide(narratorLayer(settings)),
-      Layer.provideMerge(FetchHttpClient.layer),
-    ),
+    cleanerLayer(settings).pipe(Layer.provideMerge(FetchHttpClient.layer)),
   );
   const scope = Effect.runSync(Scope.make());
   const pages = new Map<number, WebContents>();
@@ -83,7 +81,7 @@ export async function install(
       const requests = new Map<string, Fiber.Fiber<void>>();
       let attached = false;
       const injectionLock = yield* Semaphore.make(1);
-      let moduleUrl: string | undefined;
+      let documentVersion = 0;
       const send = (method: string, params: Record<string, unknown> = {}) =>
         attempt(() => view.debugger.sendCommand(method, params));
       const deliver = (
@@ -112,6 +110,7 @@ export async function install(
         params: unknown,
       ) => {
         if (method === "Runtime.executionContextsCleared") {
+          documentVersion++;
           contexts.clear();
           for (const fiber of requests.values())
             Effect.runFork(Fiber.interrupt(fiber));
@@ -175,6 +174,7 @@ export async function install(
       };
       const inject = Effect.gen(function* () {
         if (!active || !allowed(view)) return;
+        const startedVersion = documentVersion;
         if (!attached) {
           if (view.debugger.isAttached())
             return yield* new ClaudeError({
@@ -189,17 +189,17 @@ export async function install(
           yield* send("Runtime.enable");
           yield* send("Runtime.addBinding", { name: bindingName });
         }
-        if (!moduleUrl) {
-          const resources = yield* attempt(() =>
-            view.executeJavaScript(
-              "[...document.querySelectorAll('script[src],link[rel=modulepreload]')].map(e => e.src || e.href).concat(performance.getEntriesByType('resource').map(e => e.name))",
-            ),
-          );
-          const urls = yield* Schema.decodeUnknownEffect(Resources)(resources);
-          moduleUrl = yield* discoverSpeechModule(urls).pipe(
-            Effect.provideService(HttpClient.HttpClient, http),
-          );
-        }
+        const resources = yield* attempt(() =>
+          view.executeJavaScript(
+            "[...document.querySelectorAll('script[src],link[rel=modulepreload]')].map(e => e.src || e.href).concat(performance.getEntriesByType('resource').map(e => e.name))",
+          ),
+        );
+        const urls = yield* Schema.decodeUnknownEffect(Resources)(resources);
+        const moduleUrl = yield* discoverSpeechModule(urls).pipe(
+          Effect.provideService(HttpClient.HttpClient, http),
+        );
+        if (startedVersion !== documentVersion || !active || !allowed(view))
+          return;
         // The old v1 runtime has already been removed by its control above.
         const result = yield* attempt(() =>
           view.executeJavaScript(
@@ -223,6 +223,7 @@ export async function install(
         ),
       );
       const onReady = () => {
+        documentVersion++;
         Effect.runSync(Effect.forkIn(inject, viewScope));
       };
       const onDestroyed = () => {

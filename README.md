@@ -111,9 +111,9 @@ Effect, so synchronous replacements and asynchronous service calls share one
 interface. TypeScript preserves service requirements and error types.
 
 For an asynchronous rule, use `Effect.fn` and `yield*` a service. Provide its Layer
-at the application composition point (`src/engine/SpeechCleaner.ts` and the host
-composition), just as the table rule uses `TableNarrator`. The engine needs no
-new rule types or switch cases.
+in `cleanerLayer` in **`speech.config.ts`**, alongside the existing narrator
+Layer. TypeScript checks that every registered rule's services are supplied.
+The engine and Claude adapter need no edits for new rules or services.
 
 You can also use the pipeline independently of Claude:
 

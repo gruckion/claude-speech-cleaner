@@ -1,9 +1,10 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun";
-import { Console, Effect, FileSystem, Layer, Schema } from "effect";
+import { Console, Effect, FileSystem, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { FetchHttpClient } from "effect/http";
 import { Socket } from "effect/socket";
-import { narratorLayer, readProviderSettings } from "../ai/Provider.ts";
+import { readProviderSettings } from "../ai/Provider.ts";
+import { cleanerLayer } from "../../speech.config.ts";
 import { SpeechCleaner } from "../engine/SpeechCleaner.ts";
 import { ClaudeError } from "../claude/protocol.ts";
 import { connectInspector } from "./Inspector.ts";
@@ -30,9 +31,7 @@ const runDesktop = Effect.fn("Cli.desktop")(function* (
     action === "apply"
       ? `(() => { const require = process.getBuiltinModule('module').createRequire(process.execPath); const path = ${JSON.stringify(`${root}/dist/desktop.cjs`)}; delete require.cache[require.resolve(path)]; return require(path).install(${JSON.stringify(renderer)}, ${JSON.stringify(settings)}); })()`
       : `${key} ? ${key}.${action}() : ({ installed: false })`;
-  const outcome = yield* inspector.evaluate(operation).pipe(Effect.exit);
-  yield* inspector.shutdown;
-  const result = yield* outcome;
+  const result = yield* inspector.evaluate(operation);
   yield* Console.log(JSON.stringify(result, null, 2));
   if (action === "remove") {
     const decoded = Schema.decodeUnknownOption(
@@ -64,11 +63,7 @@ const preview = Command.make(
     const settings = yield* readProviderSettings;
     const result = yield* SpeechCleaner.use((cleaner) =>
       cleaner.replace(text),
-    ).pipe(
-      Effect.provide(
-        SpeechCleaner.layer.pipe(Layer.provide(narratorLayer(settings))),
-      ),
-    );
+    ).pipe(Effect.provide(cleanerLayer(settings)));
     yield* Console.log(result.text);
     if (result.skipped.length)
       yield* Console.error(`Skipped: ${result.skipped.join(", ")}`);
