@@ -1,6 +1,6 @@
 {
   "name": "claude-speech-cleaner",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "packageManager": "bun@1.4.2",
   "engines": {
     "bun": ">=1.4.2"

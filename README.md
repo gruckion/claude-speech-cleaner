@@ -8,6 +8,7 @@ to follow. It changes only the text passed to speech: conversation history,
 generated code, files, clipboard and keyboard input stay untouched.
 
 - Read separators in backtick-wrapped filenames, paths and snake_case identifiers as spaces.
+- Read unquoted file paths as words and omit Markdown blockquote markers from speech.
 - Turn Markdown tables into spoken prose using an LLM.
 - Read fenced prose directly; classify actual code with Jev before asking an LLM to explain it.
 - Add named, independently testable replacers in one registration file.
@@ -119,6 +120,21 @@ the supplied configuration in `src/ai/Provider.ts` without changing the replacer
 or engine. Each narrator owns its instructions; shared completion validation
 lives in `src/ai/Narration.ts`.
 
+## Paths and quotes
+
+`filePaths` replaces slashes, underscores and hyphens in inline file paths with
+a filename extension or an explicit directory prefix/suffix (`./`, `../`, `~/`,
+`/`, or a trailing `/`). Ambiguous inline tokens such as `x/y` remain intact. For
+paths without backticks, it requires a slash and filename extension, such as
+`research/pedro-review.md`. Bare domains, URLs, ratios and units are left alone.
+This is a conservative text heuristic, not a filesystem lookup.
+
+`blockquotes` removes only prefixes recognised by the Markdown parser: a quoted
+`> What about…` reads as “What about…”. Inline comparisons such as `count > 5`,
+escaped markers and code contents remain intact. A leading, unescaped `>` is
+Markdown quote syntax; use inline code or escape it when you mean a literal
+operator at the start of a line. Both rules run locally without model calls.
+
 ## Add a replacer
 
 The interface follows [URL Migrations](https://github.com/gruckion/url-migrations):
@@ -146,6 +162,8 @@ import {
   markdownTables,
   codeBlocks,
   separators,
+  filePaths,
+  blockquotes,
 } from "./src/replacers/index.ts";
 import type {
   Replacer,
@@ -158,7 +176,14 @@ import { pullRequests } from "./src/replacers/pullRequests.ts";
 
 export const replacers: ReadonlyArray<
   Replacer<NarrationFailed, TableNarrator | CodeNarrator | BlockClassifier>
-> = [codeBlocks, markdownTables, separators, pullRequests];
+> = [
+  codeBlocks,
+  markdownTables,
+  filePaths,
+  separators,
+  blockquotes,
+  pullRequests,
+];
 ```
 
 Run `bun run check`, then reapply. **No engine or Claude adapter edits needed.**
