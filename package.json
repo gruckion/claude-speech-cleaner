@@ -1,6 +1,6 @@
 {
   "name": "claude-speech-cleaner",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "packageManager": "bun@1.4.2",
   "engines": {
     "bun": ">=1.4.2"
@@ -18,7 +18,7 @@
     "remove": "bun src/cli/main.ts remove",
     "preview": "bun src/cli/main.ts preview"
   },
-  "description": "Extensible Effect TypeScript speech cleanup and AI table narration for Claude Desktop on macOS.",
+  "description": "Extensible Effect TypeScript speech cleanup and AI table/code narration for Claude Desktop on macOS.",
   "license": "MIT",
   "repository": {
     "type": "git",

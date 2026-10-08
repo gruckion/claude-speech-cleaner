@@ -9,6 +9,7 @@ generated code, files, clipboard and keyboard input stay untouched.
 
 - Read separators in backtick-wrapped filenames and paths as spaces.
 - Turn Markdown tables into spoken prose using an LLM.
+- Explain code blocks in a few spoken sentences with a separate opt-in.
 - Add named, independently testable replacers in one registration file.
 
 This is an unofficial macOS runtime modification, not a Claude Code plugin or an
@@ -38,10 +39,11 @@ The hook survives conversation switches and page reloads. **Reapply after a full
 Claude restart or update**, or after editing replacers. Reapplying replaces the
 previous installation. No background shell process needs to stay running.
 
-## Configure table narration
+## Configure AI narration
 
-Table narration is opt-in. Without a configured provider, tables retain their
-original wording and the separator replacer still runs.
+Table narration is opt-in. Code-block narration requires an additional opt-in.
+Without a configured provider, both retain their original speech input and the
+separator replacer still runs.
 
 ```sh
 cp .env.example .env
@@ -55,6 +57,8 @@ SPEECH_AI_ENABLED=true
 SPEECH_AI_BASE_URL=https://api.openai.com/v1
 SPEECH_AI_API_KEY=your-key
 SPEECH_AI_MODEL=your-model
+# Optional: also send code blocks to the provider.
+SPEECH_AI_CODE_ENABLED=true
 ```
 
 The included provider uses Effect's OpenAI-compatible **chat completions**
@@ -67,18 +71,38 @@ Preview with a synthetic example before applying:
 
 ```sh
 bun run preview examples/table.md
+bun run preview examples/code.md
 bun run apply
 ```
 
-Only recognized table source is sent to the model, not the surrounding response
-or chat history. Each table is narrated with instructions to retain row/column
-associations, values, signs, units and caveats. This is generated text: fidelity
-is not guaranteed. Empty or truncated responses, provider errors and timeouts
-leave that replacer's input unchanged. There is no silent change of provider.
+Only recognized table source is sent for table narration. With
+`SPEECH_AI_CODE_ENABLED=true`, recognized code blocks are also sent, including
+comments, string literals and fence labels. Neither rule sends the surrounding
+response or chat history. Leave code narration disabled for source you do not
+want to send to that provider. `SPEECH_AI_ENABLED=false` disables both.
 
-`TableNarrator.layer` depends on Effect's `LanguageModel`, so an Anthropic,
-OpenAI, local-model or other Effect provider Layer can replace the supplied
-configuration in `src/ai/Provider.ts` without changing the table replacer or engine.
+Tables are narrated with instructions to retain row/column associations, values,
+signs, units and caveats. Code blocks become **“Code summary:”** followed by two
+to four sentences explaining purpose, important operations and visible side
+effects. Backtick fences, tilde fences and indented blocks are recognized; inline
+code and empty blocks are left alone by this rule. No code is executed. The
+original code remains visible and unchanged in the conversation.
+
+This is generated text: fidelity is not guaranteed. Empty or truncated responses,
+provider errors and timeouts leave that replacer's input unchanged. Claude then
+uses its normal speech cleanup, which replaces triple-backtick blocks with
+“code block.” There is no silent change of provider.
+
+For models supporting the chat-completions `reasoning_effort` parameter, optionally
+set `SPEECH_AI_REASONING_EFFORT=none` (or another supported effort) to reduce latency.
+Omit it for providers that do not support it. No reasoning option is sent by default.
+Large or multiple blocks can still exceed the deadlines described below.
+
+`TableNarrator.layer` and `CodeNarrator.layer` depend on Effect's `LanguageModel`,
+so an Anthropic, OpenAI, local-model or other Effect provider Layer can replace
+the supplied configuration in `src/ai/Provider.ts` without changing the replacers
+or engine. Each narrator owns its instructions; shared completion validation
+lives in `src/ai/Narration.ts`.
 
 ## Add a replacer
 
@@ -103,10 +127,22 @@ export const pullRequests = defineReplacer({
 Register it in **`speech.config.ts`**:
 
 ```ts
-import { markdownTables, separators } from "./src/replacers/index.ts";
+import {
+  markdownTables,
+  codeBlocks,
+  separators,
+} from "./src/replacers/index.ts";
+import type {
+  Replacer,
+  NarrationFailed,
+  TableNarrator,
+  CodeNarrator,
+} from "./src/index.ts";
 import { pullRequests } from "./src/replacers/pullRequests.ts";
 
-export const replacers = [markdownTables, separators, pullRequests];
+export const replacers: ReadonlyArray<
+  Replacer<NarrationFailed, TableNarrator | CodeNarrator>
+> = [markdownTables, codeBlocks, separators, pullRequests];
 ```
 
 Run `bun run check`, then reapply. **No engine or Claude adapter edits needed.**
@@ -119,7 +155,8 @@ interface. TypeScript preserves service requirements and error types.
 
 For an asynchronous rule, use `Effect.fn` and `yield*` a service. Provide its Layer
 in `cleanerLayer` in **`speech.config.ts`**, alongside the existing narrator
-Layer. TypeScript checks that every registered rule's services are supplied.
+Layer. Extend the registry's service/error union for new services and errors.
+TypeScript checks that every registered rule's services are supplied.
 The engine and Claude adapter need no edits for new rules or services.
 
 You can also use the pipeline independently of Claude:
@@ -162,7 +199,7 @@ rather than overwriting the other tool's changes.
 | `speech.config.ts` | Ordered replacer registration                                   |
 | `src/engine/`      | Interface, registry validation, execution, timeout and fallback |
 | `src/replacers/`   | Individual text transformations                                 |
-| `src/ai/`          | Table narration service and provider composition                |
+| `src/ai/`          | Narration services and shared provider composition              |
 | `src/claude/`      | Claude module discovery, renderer hook and Electron lifecycle   |
 | `src/cli/`         | Effect CLI, verified inspector connection and commands          |
 
@@ -179,9 +216,9 @@ no listening network port. Opening renderer DevTools can detach this bridge;
 close DevTools and reapply if needed.
 
 Replacer failures revert that rule's changes and allow later rules to run. The
-default per-rule deadline is four seconds; all sequential table calls in one
-response share that deadline. Large or multiple tables may therefore fall back
-to their original wording. The live speech hook has an eight
+default per-rule deadline is four seconds; all sequential calls within each rule
+share its deadline. Large or multiple tables/code blocks may therefore fall back
+to their original speech input. The live speech hook has an eight
 second overall deadline, after which it speaks the original text. Inputs over
 100,000 characters bypass transformations. Each renderer allows four concurrent
 requests. Text is held only during processing, with no persisted cache.
@@ -197,8 +234,8 @@ requests. Text is held only during processing, with no persisted cache.
   underscores become spaces for speech. Plain text, fenced/indented code blocks,
   command strings, URLs and bare variable names are left alone. Filenames with
   spaces and Windows-style paths are not recognized yet.
-- The GFM parser ignores fenced code. Tables are replaced by source offsets so
-  surrounding Markdown is preserved by the table rule.
+- The table parser ignores fenced code. Table and code-block replacements use
+  source offsets to preserve surrounding Markdown.
 - Claude's speech interface and loader are private and may change. Discovery
   follows the loaded first-party module loader instead of pinning an asset hash.
   After updating Claude, verify actual Read aloud as well as installation status.

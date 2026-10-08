@@ -22,7 +22,10 @@ The API key is loaded from local configuration into the CLI and Claude's main
 process. It is not sent to the renderer or included in status output. Keep `.env`
 private, use `chmod 600 .env`, and never commit it. Your configured provider
 receives the recognized Markdown tables when AI narration is enabled. The
-surrounding response is not sent by the table rule. Provider privacy, retention
+code-block rule additionally sends recognized code blocks only when
+`SPEECH_AI_CODE_ENABLED=true`, including comments and string literals. Neither
+rule sends surrounding conversation text. Source may contain secrets: leave code
+narration disabled for material you do not want sent. Provider privacy, retention
 and billing policies still apply.
 
 Only install replacers and provider code that you trust: they execute with your

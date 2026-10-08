@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.1.0 — 2026-10-08
+
+- Add separately opt-in code-block explanations before Claude removes code fences
+  for speech, using the same configured provider as table narration.
+- Keep code parsing and narration separate from the engine; share provider
+  composition and completion validation with table narration.
+- Add an optional reasoning-effort setting for compatible providers to reduce
+  latency. Preserve original speech input on disabled, failed or truncated calls.
+
 ## 2.0.2 — 2026-10-08
 
 - Limit filename cleanup to Markdown inline code containing a filename or path.
