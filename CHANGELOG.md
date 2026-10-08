@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.1 — 2026-10-08
+
+- Read file-path slashes as spaces, including unquoted paths with filename extensions.
+- Omit parsed Markdown blockquote prefixes while preserving comparison operators.
+- Keep both speech-only transformations in separately registered replacers.
+
 ## 2.2.0 — 2026-10-08
 
 - Classify fenced contents with separately opt-in Jev Choice/Noul questions. Read
