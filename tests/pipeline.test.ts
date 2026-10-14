@@ -12,6 +12,18 @@ test("separator cleanup targets only inline code containing a file reference or 
       "Call `enqueue_route_optimizations_after_commit` and `submit_route_optimization`.",
       "Call `enqueue route optimizations after commit` and `submit route optimization`.",
     ],
+    [
+      "Use `address_id`, `user_ID`, `id_lookup`, and `get_id()`.",
+      "Use `address I D`, `user I D`, `I D lookup`, and `get I D()`.",
+    ],
+    [
+      "`identity` `identity_key` `valid_id2` `id` and plain address_id.",
+      "`identity` `identity key` `valid id2` `id` and plain address_id.",
+    ],
+    [
+      "`address_id.ts` `echo address_id`\n\n```ts\nconst address_id = 1;\n```",
+      "`address id.ts` `echo address_id`\n\n```ts\nconst address_id = 1;\n```",
+    ],
     ["Open `some/file-name.bob`.", "Open `some/file name.bob`."],
     [
       "Use `my_file-name.ts` and `~/café_notes/version-2/`.",

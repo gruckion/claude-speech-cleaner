@@ -175,6 +175,12 @@ escaped markers and code contents remain intact. A leading, unescaped `>` is
 Markdown quote syntax; use inline code or escape it when you mean a literal
 operator at the start of a line. Both rules run locally without model calls.
 
+Within backtick-wrapped snake_case identifiers, the `id` segment is spelled out
+as “I D”: `address_id` becomes “address I D” and `get_id()` becomes “get I D”.
+Matching is case-insensitive and requires a whole underscore-separated segment;
+words such as `identity`, ordinary prose, filenames and code blocks do not get
+this pronunciation change.
+
 ## URL speech
 
 The local `urls` rule shortens visible HTTP(S) and `www.` URLs before hash and

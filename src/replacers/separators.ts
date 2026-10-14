@@ -34,7 +34,15 @@ export const separators = defineReplacer({
             const end = node.position?.end.offset;
             if (start === undefined || end === undefined) continue;
             output += text.slice(cursor, start);
-            output += text.slice(start, end).replace(/[-_]+/g, " ");
+            const source = text.slice(start, end);
+            output += isIdentifier(node.value)
+              ? source.replace(
+                  node.value,
+                  node.value
+                    .replace(/(^|_)id(?=_|\(\)$|$)/gi, "$1I D")
+                    .replace(/_+/g, " "),
+                )
+              : source.replace(/[-_]+/g, " ");
             cursor = end;
           } else if ("children" in node) visit(node.children);
         }
