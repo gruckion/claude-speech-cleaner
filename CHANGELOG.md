@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.4 — 2026-10-14
+
+- Spell out whole `id` segments in inline snake_case identifiers as “I D” for
+  speech, so `address_id` no longer sounds like “address ed.” Other words,
+  prose, filenames and code blocks keep their existing behavior.
+
 ## 2.3.3 — 2026-10-14
 
 - Read raw GitHub attachment URLs as “GitHub attachment” and other raw web URLs
