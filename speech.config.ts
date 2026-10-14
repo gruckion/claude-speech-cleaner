@@ -6,6 +6,7 @@ import {
   blockquotes,
   hashes,
   migrationFiles,
+  urls,
 } from "./src/replacers/index.ts";
 import { Layer } from "effect";
 import { SpeechCleaner } from "./src/engine/SpeechCleaner.ts";
@@ -28,6 +29,7 @@ export const replacers: ReadonlyArray<
 > = [
   codeBlocks,
   markdownTables,
+  urls,
   migrationFiles,
   hashes,
   filePaths,
