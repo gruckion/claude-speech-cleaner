@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.3 — 2026-10-14
+
+- Read raw GitHub attachment URLs as “GitHub attachment” and other raw web URLs
+  by hostname, omitting long paths, queries and hashes. Preserve meaningful link
+  labels and code. This separately registered speech rule runs without AI.
+
 ## 2.3.2 — 2026-10-14
 
 - Read context-confirmed `timestamp_hash.py` migration filenames as “migration

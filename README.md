@@ -175,6 +175,20 @@ escaped markers and code contents remain intact. A leading, unescaped `>` is
 Markdown quote syntax; use inline code or escape it when you mean a literal
 operator at the start of a line. Both rules run locally without model calls.
 
+## URL speech
+
+The local `urls` rule shortens visible HTTP(S) and `www.` URLs before hash and
+filename cleanup. Raw GitHub `/user-attachments/assets/…` links read as “GitHub
+attachment”; other raw URLs read as “link to” their hostname, without paths,
+query parameters or fragments. No model or API key is needed.
+
+Meaningful Markdown link labels stay intact. URL-only labels, angle-bracket
+autolinks and standalone inline-code URLs are shortened. Link destinations and
+reference definitions stay intact in the speech Markdown; Claude reads named
+links by their label. Fenced/indented code and inline commands containing URLs
+are excluded. This only changes speech; displayed text and clickable links stay
+unchanged.
+
 ## Add a replacer
 
 The interface follows [URL Migrations](https://github.com/gruckion/url-migrations):
@@ -206,6 +220,7 @@ import {
   blockquotes,
   hashes,
   migrationFiles,
+  urls,
 } from "./src/replacers/index.ts";
 import type {
   Replacer,
@@ -225,6 +240,7 @@ export const replacers: ReadonlyArray<
 > = [
   codeBlocks,
   markdownTables,
+  urls,
   migrationFiles,
   hashes,
   filePaths,
