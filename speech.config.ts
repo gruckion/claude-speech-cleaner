@@ -5,6 +5,7 @@ import {
   filePaths,
   blockquotes,
   hashes,
+  migrationFiles,
 } from "./src/replacers/index.ts";
 import { Layer } from "effect";
 import { SpeechCleaner } from "./src/engine/SpeechCleaner.ts";
@@ -24,7 +25,15 @@ export const replacers: ReadonlyArray<
     NarrationFailed,
     TableNarrator | CodeNarrator | BlockClassifier | HashClassifier
   >
-> = [codeBlocks, markdownTables, hashes, filePaths, separators, blockquotes];
+> = [
+  codeBlocks,
+  markdownTables,
+  migrationFiles,
+  hashes,
+  filePaths,
+  separators,
+  blockquotes,
+];
 
 /** Compose any new service-backed replacer's Layer here, without changing the engine. */
 export const cleanerLayer = (settings: ProviderSettings) =>

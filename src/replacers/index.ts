@@ -4,3 +4,4 @@ export { codeBlocks } from "./codeBlocks.ts";
 export { filePaths } from "./filePaths.ts";
 export { blockquotes } from "./blockquotes.ts";
 export { hashes } from "./hashes.ts";
+export { migrationFiles } from "./migrationFiles.ts";

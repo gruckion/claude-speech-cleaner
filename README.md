@@ -142,6 +142,15 @@ not measured accuracy. Invoice numbers, colours and other ambiguous values shoul
 remain unchanged; classification can still be wrong. The same token can receive
 different decisions in different contexts. Four-character suffixes can collide.
 
+The separately registered `migration-files` rule uses the same settings. Before
+filename cleanup, it checks standalone `timestamp_hash.py` filenames (a ten-digit
+Unix timestamp and a 7–64-character hexadecimal revision). When Jev confirms the
+database migration context, `1791970000_b310dd58c6da.py` becomes “migration ending
+c6da” in speech. It omits the timestamp and extension. Paths, URL destinations,
+visible URLs and still-fenced code are excluded. The rule has its own 32-candidate
+limit and 1.5-second deadline; uncertain filenames continue through ordinary
+filename cleanup.
+
 Missing, uncertain or malformed answers, errors, and the 1.5-second hash deadline
 preserve original tokens. This setting is a separate opt-in because it sends nearby
 visible prose to Jev, unlike block/table-only narration. The global AI switch disables
@@ -196,6 +205,7 @@ import {
   filePaths,
   blockquotes,
   hashes,
+  migrationFiles,
 } from "./src/replacers/index.ts";
 import type {
   Replacer,
@@ -215,6 +225,7 @@ export const replacers: ReadonlyArray<
 > = [
   codeBlocks,
   markdownTables,
+  migrationFiles,
   hashes,
   filePaths,
   separators,
