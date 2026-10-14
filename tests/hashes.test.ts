@@ -7,7 +7,11 @@ import { SpeechCleaner } from "../src/engine/SpeechCleaner.ts";
 const Body = Schema.Struct({
   state: Schema.Struct({
     candidates: Schema.Array(
-      Schema.Struct({ value: Schema.String, context: Schema.String }),
+      Schema.Struct({
+        value: Schema.String,
+        context: Schema.String,
+        kind: Schema.optional(Schema.Literal("migration-file")),
+      }),
     ),
   }),
   questions: Schema.Record(Schema.String, Schema.Unknown),
@@ -73,6 +77,45 @@ test("configured hash speech classifies visible candidates with bounded context 
       "hash_2",
     ]);
 
+    const migration =
+      "I re-pointed our migration and renamed it to `1791970000_b310dd58c6da.py`.";
+    expect((await run(migration)).text).toBe(
+      "I re-pointed our migration and renamed it to `migration ending c6da`.",
+    );
+    expect(bodies.at(-1)?.state.candidates).toEqual([
+      {
+        value: "1791970000_b310dd58c6da.py",
+        kind: "migration-file",
+        context: expect.stringContaining("re-pointed our migration"),
+      },
+    ]);
+    expect(
+      (
+        await run(
+          "Migration [1791970000_DEADBEEF.py](https://example.com/private/1791970000_DEADBEEF.py). Next migration 1791970001_b310dd58c6da.py.",
+        )
+      ).text,
+    ).toBe(
+      "Migration [migration ending BEEF](https://example.com/private/1791970000_DEADBEEF.py). Next migration migration ending c6da.",
+    );
+    expect(JSON.stringify(bodies.at(-1))).not.toContain("private");
+    const migrationFallback =
+      "I re-pointed our migration and renamed it to `1791970000 b310dd58c6da.py`.";
+    answers = { hash_0: { type: "noul", noul: 0.3 } };
+    expect((await run(migration)).text).toBe(migrationFallback);
+    expect(
+      (await run(migration, { ...settings, hashEnabled: false })).text,
+    ).toBe(migrationFallback);
+    status = 503;
+    expect((await run(migration)).text).toBe(migrationFallback);
+    status = 200;
+    answers = { hash_0: yes };
+    const excludedFilenames =
+      "[download](https://example.com/1791970000_b310dd58c6da.py) https://example.com/1791970000_b310dd58c6da.py\n\n```py\n1791970000_b310dd58c6da.py\n```\n\n`backup_1791970000_b310dd58c6da.py` `1791970000_b310dd58c6da.py.bak`";
+    const excludedCalls = bodies.length;
+    await run(excludedFilenames);
+    expect(bodies).toHaveLength(excludedCalls);
+
     const before = bodies.length;
     const excluded =
       "[cancel](https://example.com/deadbeef1234) https://example.com/abcdef123456\n\n```sh\ngit checkout abcdef123456\n```\n\n`src/abcdef123456.py` abcdef123456_name";
@@ -119,6 +162,7 @@ test("configured hash speech classifies visible candidates with bounded context 
     );
     expect(bodies.at(-1)?.state.candidates).toHaveLength(32);
     slow = true;
+    expect((await run(migration)).text).toBe(migrationFallback);
     expect((await run("Commit abcdef123456.")).text).toBe(
       "Commit abcdef123456.",
     );

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.2 — 2026-10-14
+
+- Read context-confirmed `timestamp_hash.py` migration filenames as “migration
+  ending” plus the revision’s last four characters. Reuses the Jev hash opt-in
+  and preserves normal filename cleanup when classification is uncertain.
+
 ## 2.3.1 — 2026-10-08
 
 - Start Claude Code Read aloud with the answer after activity groups, preserving
